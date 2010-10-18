@@ -240,6 +240,10 @@ static int responseCdmaSignalInfoRecord(Parcel &p,void *response, size_t respons
 static int responseCdmaCallWaiting(Parcel &p,void *response, size_t responselen);
 static int responseGetDataCallProfile(Parcel &p, void *response, size_t responselen);
 
+static int responseUiccSubscription(Parcel &p, void *response, size_t responselen);
+static int responseDataSubscription(Parcel &p, void *response, size_t responselen);
+static int responseSimRefresh(Parcel &p, void *response, size_t responselen);
+
 extern "C" const char * requestToString(int request);
 extern "C" const char * failCauseToString(RIL_Errno);
 extern "C" const char * callStateToString(RIL_CallState);
@@ -1724,6 +1728,38 @@ static int responseString(Parcel &p, void *response, size_t responselen) {
 static int responseVoid(Parcel &p, void *response, size_t responselen) {
     startResponse;
     removeLastChar;
+    return 0;
+}
+
+static int responseSimRefresh(Parcel &p, void *response, size_t responselen) {
+
+    if (response == NULL && responselen != 0) {
+        LOGE("invalid response: NULL");
+        return RIL_ERRNO_INVALID_RESPONSE;
+    }
+
+    if (responselen % sizeof (RIL_SimRefresh) != 0) {
+        LOGE("invalid response length %d expected multiple of %d\n",
+            (int)responselen, (int)sizeof (RIL_SimRefresh));
+        return RIL_ERRNO_INVALID_RESPONSE;
+    }
+
+    startResponse;
+
+    RIL_SimRefresh *p_cur = ((RIL_SimRefresh*)response);
+
+    p.writeInt32(p_cur->refreshResult);
+    p.writeInt32(p_cur->slot);
+    writeStringToParcel(p, p_cur->aidPtr);
+    p.writeInt32(p_cur->efId);
+
+    appendPrintBuf("%s%d,%d,%s,%d",
+                   printBuf, p_cur->refreshResult,
+                   p_cur->slot, p_cur->aidPtr,
+                   p_cur->efId);
+
+    closeResponse;
+
     return 0;
 }
 

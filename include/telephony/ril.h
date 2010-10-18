@@ -615,16 +615,22 @@ typedef struct
                        0x41, 0x30*/
 } RIL_RequestImsi;
 
-
-/* The result of a SIM refresh, returned in data[0] of RIL_UNSOL_SIM_REFRESH */
 typedef enum {
-    /* A file on SIM has been updated.  data[1] contains the EFID. */
+    /* A file on SIM has been updated. */
     SIM_FILE_UPDATE = 0,
     /* SIM initialized.  All files should be re-read. */
     SIM_INIT = 1,
     /* SIM reset.  SIM power required, SIM may be locked and all files should be re-read. */
     SIM_RESET = 2
 } RIL_SimRefreshResult;
+
+typedef struct {
+    RIL_SimRefreshResult     refreshResult;      /* Sim Refresh result */
+    int                      slot;               /* slot numbers 0, 1, ... etc. */
+    char                    *aidPtr;             /* null terminated string, e.g., from 0xA0, 0x00
+                                                    0x41, 0x30*/
+    int                      efId;               /* EFID */
+} RIL_SimRefresh;
 
 typedef struct {
     char *          number;             /* Remote party number */
@@ -3460,15 +3466,8 @@ typedef struct {
  *
  * Indicates that file(s) on the SIM have been updated, or the SIM
  * has been reinitialized.
+ * "data" is a const RIL_SimRefresh *
  *
- * "data" is an int *
- * ((int *)data)[0] is a RIL_SimRefreshResult.
- * ((int *)data)[1] is the slot number if the result is
- * SIM_FILE_UPDATE or NULL for any other result.
- * ((int *)data)[2] is the AID if the result is
- * SIM_FILE_UPDATE or NULL for any other result.
- * ((int *)data)[3] is the EFID of the updated file if the result is
- * SIM_FILE_UPDATE or NULL for any other result.
  *
  * Note: If the SIM state changes as a result of the SIM refresh (eg,
  * SIM_READY -> SIM_LOCKED_OR_ABSENT), RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED
