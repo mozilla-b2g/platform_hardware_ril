@@ -1221,7 +1221,7 @@ static void requestRegistrationState(int request, void *data,
     if (request == RIL_REQUEST_REGISTRATION_STATE) {
         cmd = "AT+CREG?";
         prefix = "+CREG:";
-    } else if (request == RIL_REQUEST_GPRS_REGISTRATION_STATE) {
+    } else if (request == RIL_REQUEST_DATA_REGISTRATION_STATE) {
         cmd = "AT+CGREG?";
         prefix = "+CGREG:";
     } else {
@@ -1925,7 +1925,7 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
             requestSignalStrength(data, datalen, t);
             break;
         case RIL_REQUEST_REGISTRATION_STATE:
-        case RIL_REQUEST_GPRS_REGISTRATION_STATE:
+        case RIL_REQUEST_DATA_REGISTRATION_STATE:
             requestRegistrationState(request, data, datalen, t);
             break;
         case RIL_REQUEST_OPERATOR:

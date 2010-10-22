@@ -32,6 +32,7 @@
 #define ANDROID_RIL_H 1
 
 #include <stdlib.h>
+#include <telephony/ril_cdma_sms.h>
 #ifndef FEATURE_UNIT_TEST
 #include <sys/time.h>
 #endif /* !FEATURE_UNIT_TEST */
@@ -115,6 +116,104 @@ typedef enum {
     CDMA_SSRC_NV = 0,
     CDMA_SSRC_RUIM = 1,
 } RIL_CdmaSubscriptionSource;
+/*
+ * ((const char **)response)[0] is registration state 0-6,
+ *              0 - Not registered, MT is not currently searching
+ *                  a new operator to register
+ *              1 - Registered, home network
+ *              2 - Not registered, but MT is currently searching
+ *                  a new operator to register
+ *              3 - Registration denied
+ *              4 - Unknown
+ *              5 - Registered, roaming
+ *             10 - Same as 0, but indicates that emergency calls
+ *                  are enabled.
+ *             12 - Same as 2, but indicates that emergency calls
+ *                  are enabled.
+ *             13 - Same as 3, but indicates that emergency calls
+ *                  are enabled.
+ *             14 - Same as 4, but indicates that emergency calls
+ *                  are enabled.
+ *
+ * ((const char **)response)[1] is LAC if registered on a GSM/WCDMA system or
+ *                              NULL if not.Valid LAC are 0x0000 - 0xffff
+ * ((const char **)response)[2] is CID if registered on a * GSM/WCDMA or
+ *                              NULL if not.
+ *                                 Valid CID are 0x00000000 - 0xffffffff
+ *                                    In GSM, CID is Cell ID (see TS 27.007)
+ *                                            in 16 bits
+ *                                    In UMTS, CID is UMTS Cell Identity
+ *                                             (see TS 25.331) in 28 bits
+ * ((const char **)response)[3] indicates the available radio technology.
+ *                              Valid values asm given in RIL_RadioTechnology enum
+ * ((const char **)response)[4] is Base Station ID if registered on a CDMA
+ *                              system or NULL if not.  Base Station ID in
+ *                              decimal format
+ * ((const char **)response)[5] is Base Station latitude if registered on a
+ *                              CDMA system or NULL if not. Base Station
+ *                              latitude is a decimal number as specified in
+ *                              3GPP2 C.S0005-A v6.0. It is represented in
+ *                              units of 0.25 seconds and ranges from -1296000
+ *                              to 1296000, both values inclusive (corresponding
+ *                              to a range of -90° to +90°).
+ * ((const char **)response)[6] is Base Station longitude if registered on a
+ *                              CDMA system or NULL if not. Base Station
+ *                              longitude is a decimal number as specified in
+ *                              3GPP2 C.S0005-A v6.0. It is represented in
+ *                              units of 0.25 seconds and ranges from -2592000
+ *                              to 2592000, both values inclusive (corresponding
+ *                              to a range of -180° to +180°).
+ * ((const char **)response)[7] is concurrent services support indicator if
+ *                              registered on a CDMA system 0-1.
+ *                                   0 - Concurrent services not supported,
+ *                                   1 - Concurrent services supported
+ * ((const char **)response)[8] is System ID if registered on a CDMA system or
+ *                              NULL if not. Valid System ID are 0 - 32767
+ * ((const char **)response)[9] is Network ID if registered on a CDMA system or
+ *                              NULL if not. Valid System ID are 0 - 65535
+ * ((const char **)response)[10] is the TSB-58 Roaming Indicator if registered
+ *                               on a CDMA or EVDO system or NULL if not. Valid values
+ *                               are 0-255.
+ * ((const char **)response)[11] indicates whether the current system is in the
+ *                               PRL if registered on a CDMA or EVDO system or NULL if
+ *                               not. 0=not in the PRL, 1=in the PRL
+ * ((const char **)response)[12] is the default Roaming Indicator from the PRL,
+ *                               if registered on a CDMA or EVDO system or NULL if not.
+ *                               Valid values are 0-255.
+ * ((const char **)response)[13] if registration state is 3 (Registration
+ *                               denied) this is an enumerated reason why
+ *                               registration was denied.  See 3GPP TS 24.008,
+ *                               10.5.3.6 and Annex G.
+ *                                 0 - General
+ *                                 1 - Authentication Failure
+ *                                 2 - IMSI unknown in HLR
+ *                                 3 - Illegal MS
+ *                                 4 - Illegal ME
+ *                                 5 - PLMN not allowed
+ *                                 6 - Location area not allowed
+ *                                 7 - Roaming not allowed
+ *                                 8 - No Suitable Cells in this Location Area
+ *                                 9 - Network failure
+ *                                10 - Persistent location update reject
+ *
+ * Please note that registration state 4 ("unknown") is treated
+ * as "out of service" in the Android telephony system
+ *
+ * Registration state 3 can be returned if Location Update Reject
+ * (with cause 17 - Network Failure) is received repeatedly from the network,
+ * to facilitate "managed roaming"
+ */
+
+#define RIL_MAX_NETWORKS    2     /* Maximum number of voice, data networks possible */
+
+typedef struct {
+    int numElements;                    // No. of elements in following array
+    char **regState;                    // Registration states for voice or data
+} RIL_RegistrationStateRecord;
+
+typedef struct {
+    RIL_RegistrationStateRecord records[RIL_MAX_NETWORKS];
+} RIL_RegistrationStates;
 
 /* User-to-User signaling Info activation types derived from 3GPP 23.087 v8.0 */
 typedef enum {
@@ -182,10 +281,24 @@ typedef struct {
     char *          apn;
     char *          address;    /* A space-delimited list of addresses, e.g., "192.0.1.3" or
                                    "192.0.1.11 2001:db8::1". */
+    RIL_RadioTechnology     radioTech;     /* Radio Technology, this data call was setup on */
     int             inactiveReason; /* if the data call went inactive(0),
                                        then the reason for being inactive.
                                        defined in RIL_DataCallDropCause */
 } RIL_Data_Call_Response;
+
+
+typedef struct {
+    RIL_RadioTechnologyFamily tech;
+
+    union {
+        /* Valid field if tech is RADIO_TECH_3GPP2. See RIL_REQUEST_CDMA_SEND_SMS */
+        RIL_CDMA_SMS_Message* cdmaMessage;
+
+        /* Valid field if tech is RADIO_TECH_3GPP. See RIL_REQUEST_SEND_SMS */
+        char**                gsmMessage;
+    } message;
+} RIL_IMS_SMS_Message;
 
 typedef struct {
     int messageRef;   /* TP-Message-Reference for GSM,
@@ -358,20 +471,15 @@ typedef enum {
     /* Not mentioned in the specification */
     PDP_FAIL_REGISTRATION_FAIL = -1,
     PDP_FAIL_GPRS_REGISTRATION_FAIL = -2,
+    PDP_FAIL_SIGNAL_LOST = -3,
+    PDP_FAIL_PREF_RADIO_TECH_CHANGED = -4, /* preferred technology has changed, will retry */
+    PDP_FAIL_RADIO_POWER_OFF = -5,         /* data call was disconnected because radio was resetting,
+                                              powered off - no retry */
+    PDP_FAIL_TETHERED_CALL_ON = -6,         /* data call was disconnected because tethered mode was up
+                                              on same APN/data profile - no retry until tethered call
+                                              is off */
+    PDP_FAIL_IP_VERSION_NOT_SUPPORTED = -7,   /* IPV6 is not supported no network - no retry */
 } RIL_DataCallFailCause;
-
-typedef enum {
-    /* reasons for data call drop - network/modem disconnect */
-    PDP_FAIL_UNKNOWN = 0,                 /* unknown reason */
-    PDP_FAIL_SIGNAL_LOST = 1,
-    PDP_FAIL_PREF_RADIO_TECH_CHANGED = 2, /* preferred technology has changed, will retry
-                                             with parameters appropriate for new technology */
-    PDP_FAIL_RADIO_POWER_OFF = 3,         /* data call was disconnected because radio was resetting,
-                                             powered off - no retry */
-    PDP_FAIL_TETHERED_CALL_ACTIVE = 4,    /* data call was disconnected by the modem because tethered
-                                             mode was up on same APN/data profile - no retry until
-                                             tethered call is off */
-} RIL_DataCallDropCause;
 
 /* See RIL_REQUEST_SETUP_DATA_CALL */
 typedef enum {
@@ -475,6 +583,11 @@ typedef struct
   RIL_PinState     pin1;
   RIL_PinState     pin2;
 } RIL_AppStatus;
+
+typedef struct {
+    RIL_PersoSubstate depersonalizationType;
+    char             *depersonalizationCode;
+} RIL_Depersonalization;
 
 typedef struct
 {
@@ -878,12 +991,11 @@ typedef struct {
 #define RIL_REQUEST_CHANGE_SIM_PIN2 7
 
 /**
- * RIL_REQUEST_ENTER_NETWORK_DEPERSONALIZATION
+ * RIL_REQUEST_ENTER_DEPERSONALIZATION_CODE
  *
  * Requests that network personlization be deactivated
  *
- * "data" is const char **
- * ((const char **)(data))[0]] is network depersonlization code
+ * "data" is const RIL_Depersonalization*
  *
  * "response" is int *
  * ((int *)response)[0] is the number of retries remaining, or -1 if unknown
@@ -897,7 +1009,7 @@ typedef struct {
  *     (code is invalid)
  */
 
-#define RIL_REQUEST_ENTER_NETWORK_DEPERSONALIZATION 8
+#define RIL_REQUEST_ENTER_DEPERSONALIZATION_CODE 8
 
 /**
  * RIL_REQUEST_GET_CURRENT_CALLS
@@ -1116,96 +1228,8 @@ typedef struct {
  * Request current registration state
  *
  * "data" is NULL
- * "response" is a "char **"
- * ((const char **)response)[0] is registration state 0-6,
- *              0 - Not registered, MT is not currently searching
- *                  a new operator to register
- *              1 - Registered, home network
- *              2 - Not registered, but MT is currently searching
- *                  a new operator to register
- *              3 - Registration denied
- *              4 - Unknown
- *              5 - Registered, roaming
- *             10 - Same as 0, but indicates that emergency calls
- *                  are enabled.
- *             12 - Same as 2, but indicates that emergency calls
- *                  are enabled.
- *             13 - Same as 3, but indicates that emergency calls
- *                  are enabled.
- *             14 - Same as 4, but indicates that emergency calls
- *                  are enabled.
+ * "response" is a "const RIL_RegistrationStates*"
  *
- * ((const char **)response)[1] is LAC if registered on a GSM/WCDMA system or
- *                              NULL if not.Valid LAC are 0x0000 - 0xffff
- * ((const char **)response)[2] is CID if registered on a * GSM/WCDMA or
- *                              NULL if not.
- *                                 Valid CID are 0x00000000 - 0xffffffff
- *                                    In GSM, CID is Cell ID (see TS 27.007)
- *                                            in 16 bits
- *                                    In UMTS, CID is UMTS Cell Identity
- *                                             (see TS 25.331) in 28 bits
- * ((const char **)response)[3] indicates the available radio technology.
- *                              Valid values asm given in RIL_RadioTechnology enum
- * ((const char **)response)[4] is Base Station ID if registered on a CDMA
- *                              system or NULL if not.  Base Station ID in
- *                              decimal format
- * ((const char **)response)[5] is Base Station latitude if registered on a
- *                              CDMA system or NULL if not. Base Station
- *                              latitude is a decimal number as specified in
- *                              3GPP2 C.S0005-A v6.0. It is represented in
- *                              units of 0.25 seconds and ranges from -1296000
- *                              to 1296000, both values inclusive (corresponding
- *                              to a range of -90° to +90°).
- * ((const char **)response)[6] is Base Station longitude if registered on a
- *                              CDMA system or NULL if not. Base Station
- *                              longitude is a decimal number as specified in
- *                              3GPP2 C.S0005-A v6.0. It is represented in
- *                              units of 0.25 seconds and ranges from -2592000
- *                              to 2592000, both values inclusive (corresponding
- *                              to a range of -180° to +180°).
- * ((const char **)response)[7] is concurrent services support indicator if
- *                              registered on a CDMA system 0-1.
- *                                   0 - Concurrent services not supported,
- *                                   1 - Concurrent services supported
- * ((const char **)response)[8] is System ID if registered on a CDMA system or
- *                              NULL if not. Valid System ID are 0 - 32767
- * ((const char **)response)[9] is Network ID if registered on a CDMA system or
- *                              NULL if not. Valid System ID are 0 - 65535
- * ((const char **)response)[10] is the TSB-58 Roaming Indicator if registered
- *                               on a CDMA or EVDO system or NULL if not. Valid values
- *                               are 0-255.
- * ((const char **)response)[11] indicates whether the current system is in the
- *                               PRL if registered on a CDMA or EVDO system or NULL if
- *                               not. 0=not in the PRL, 1=in the PRL
- * ((const char **)response)[12] is the default Roaming Indicator from the PRL,
- *                               if registered on a CDMA or EVDO system or NULL if not.
- *                               Valid values are 0-255.
- * ((const char **)response)[13] if registration state is 3 (Registration
- *                               denied) this is an enumerated reason why
- *                               registration was denied.  See 3GPP TS 24.008,
- *                               10.5.3.6 and Annex G.
- *                                 0 - General
- *                                 1 - Authentication Failure
- *                                 2 - IMSI unknown in HLR
- *                                 3 - Illegal MS
- *                                 4 - Illegal ME
- *                                 5 - PLMN not allowed
- *                                 6 - Location area not allowed
- *                                 7 - Roaming not allowed
- *                                 8 - No Suitable Cells in this Location Area
- *                                 9 - Network failure
- *                                10 - Persistent location update reject
- * ((const char **)response)[14] is the Primary Scrambling Code of the current
- *                               cell as described in TS 25.331, in hexadecimal
- *                               format, or NULL if unknown or not registered
- *                               to a UMTS network.
- *
- * Please note that registration state 4 ("unknown") is treated
- * as "out of service" in the Android telephony system
- *
- * Registration state 3 can be returned if Location Update Reject
- * (with cause 17 - Network Failure) is received repeatedly from the network,
- * to facilitate "managed roaming"
  *
  * Valid errors:
  *  SUCCESS
@@ -1215,37 +1239,20 @@ typedef struct {
 #define RIL_REQUEST_REGISTRATION_STATE 20
 
 /**
- * RIL_REQUEST_GPRS_REGISTRATION_STATE
+ * RIL_REQUEST_DATA_REGISTRATION_STATE
  *
- * Request current GPRS registration state
+ * Request current registration state for data networks.
  *
  * "data" is NULL
- * "response" is a "char **"
- * ((const char **)response)[0] is registration state 0-5 from TS 27.007 10.1.20 AT+CGREG
- * ((const char **)response)[1] is LAC if registered or NULL if not
- * ((const char **)response)[2] is CID if registered or NULL if not
- * ((const char **)response)[3] indicates the available radio technology, where:
- *      0 == unknown
- *      1 == GPRS only
- *      2 == EDGE
- *      3 == UMTS
- *      9 == HSDPA
- *      10 == HSUPA
- *      11 == HSPA
+ * "response" is a "const RIL_RegistrationStates*"
  *
- * LAC and CID are in hexadecimal format.
- * valid LAC are 0x0000 - 0xffff
- * valid CID are 0x00000000 - 0x0fffffff
- *
- * Please note that registration state 4 ("unknown") is treated
- * as "out of service" in the Android telephony system
  *
  * Valid errors:
  *  SUCCESS
  *  RADIO_NOT_AVAILABLE
  *  GENERIC_FAILURE
  */
-#define RIL_REQUEST_GPRS_REGISTRATION_STATE 21
+#define RIL_REQUEST_DATA_REGISTRATION_STATE 21
 
 /**
  * RIL_REQUEST_OPERATOR
@@ -1385,7 +1392,7 @@ typedef struct {
  *                          0 - 3GPP2, 1 - 3GPP
  *
  * ((const char **)data)[1] is a RIL_DataProfile (support is optional)
- * ((const char **)data)[2] is the APN to connect to if radio technology is GSM/UMTS. This APN will
+ * ((const char **)data)[2] is the APN to connect to if radio technology is 3GPP. This APN will
  *                          override the one in the profile. NULL indicates no APN overrride.
  * ((const char **)data)[3] is the username for APN, or NULL
  * ((const char **)data)[4] is the password for APN, or NULL
@@ -1414,6 +1421,7 @@ typedef struct {
  *  RADIO_NOT_AVAILABLE
  *  SETUP_DATA_CALL_FAILURE "response" is a RIL_DataCallFailCause
  *  GENERIC_FAILURE
+ *  SETUP_DATA_CALL_FAILURE "response" is a RIL_DataCallFailCause
  *
  * See also: RIL_REQUEST_DEACTIVATE_DATA_CALL
  */
@@ -2039,6 +2047,9 @@ typedef struct {
  * Requests the failure cause code for the most recently failed PDP
  * context or CDMA data connection active
  * replaces RIL_REQUEST_LAST_PDP_FAIL_CAUSE
+ *
+ * This function is deprecated in favor of returning the fail cause
+ * along with SETUP_DATA_CALL response.
  *
  * "data" is NULL
  *
@@ -2905,7 +2916,6 @@ typedef struct {
  * ((const char **)response)[2] is a comma separated list of H_NID (Home NID) if
  *                              CDMA subscription is available, in decimal format
  * ((const char **)response)[3] is MIN (10 digits, MIN2+MIN1) if CDMA subscription is available
- * ((const char **)response)[4] is PRL version if CDMA subscription is available
  *
  * Valid errors:
  *  SUCCESS
@@ -3063,26 +3073,8 @@ typedef struct {
  *  SUCCESS
  *  RADIO_NOT_AVAILABLE
  *  GENERIC_FAILURE
- *
  */
 #define RIL_REQUEST_REPORT_STK_SERVICE_IS_RUNNING 103
-
-/**
- * RIL_REQUEST_VOICE_RADIO_TECH
- *
- * Query the radio technology type (3GPP/3GPP2) used for voice. Query is valid only
- * when radio state is RADIO_STATE_ON
- *
- * "data" is NULL
- * "response" is int *
- * ((int *) response)[0] is of type const RIL_RadioTechnologyFamily
- *
- * Valid errors:
- *  SUCCESS
- *  RADIO_NOT_AVAILABLE
- *  GENERIC_FAILURE
- */
-#define RIL_REQUEST_VOICE_RADIO_TECH 106
 
 /***********************************************************************/
 
@@ -3124,6 +3116,73 @@ typedef struct {
  * See also: RIL_UNSOL_CDMA_PRL_CHANGED
  */
 #define RIL_REQUEST_CDMA_PRL_VERSION 105
+
+/**
+ * RIL_REQUEST_VOICE_RADIO_TECH
+ *
+ * Query the radio technology type (3GPP/3GPP2) used for voice. Query is valid only
+ * when radio state is RADIO_STATE_ON
+ *
+ * "data" is NULL
+ * "response" is int *
+ * ((int *) response)[0] is of type const RIL_RadioTechnologyFamily
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_VOICE_RADIO_TECH 106
+
+/**
+ * RIL_REQUEST_IMS_REGISTRATION_STATE
+ *
+ * Request current IMS registration state
+ *
+ * "data" is NULL
+ *
+ * "response" is int *
+ * ((int *)response)[0] is == 0 for IMS not registered
+ * ((int *)response)[0] is == 1 for IMS registered
+ *
+ * If ((int*)response)[0] is = 1, then ((int *) response)[1]
+ * must follow with IMS SMS encoding:
+ *
+ * ((int *) response)[1] is of type const RIL_RadioTechnologyFamily
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_IMS_REGISTRATION_STATE 107
+
+/**
+ * RIL_REQUEST_IMS_SEND_SMS
+ *
+ * Send a SMS message over IMS
+ *
+ * "data" is const RIL_IMS_SMS_Message *
+ *
+ * "response" is a const RIL_SMS_Response *
+ *
+ * Based on the return error, caller decides to resend if sending sms
+ * fails.
+ * SUCCESS is error class 0 (no error)
+ * SMS_SEND_FAIL_RETRY will cause re-send using RIL_REQUEST_CDMA_SEND_SMS
+ *   or RIL_REQUEST_SEND_SMS based on Voice Technology available.
+ * and GENERIC_FAILURE means no retry.
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  SMS_SEND_FAIL_RETRY
+ *  FDN_CHECK_FAILURE
+ *  GENERIC_FAILURE
+ *
+ */
+#define RIL_REQUEST_IMS_SEND_SMS 108
+
 
 #define RIL_UNSOL_RESPONSE_BASE 1000
 
@@ -3167,7 +3226,7 @@ typedef struct {
  * Callee will invoke the following requests on main thread:
  *
  * RIL_REQUEST_REGISTRATION_STATE
- * RIL_REQUEST_GPRS_REGISTRATION_STATE
+ * RIL_REQUEST_DATA_REGISTRATION_STATE
  * RIL_REQUEST_OPERATOR
  *
  * "data" is NULL
@@ -3590,6 +3649,46 @@ typedef struct {
  *
  */
 #define RIL_UNSOL_VOICE_RADIO_TECH_CHANGED 1034
+
+/**
+ * RIL_UNSOL_RESPONSE_IMS_NETWORK_STATE_CHANGED
+ *
+ * Called when data network states has changed
+ *
+ * Callee will invoke the following requests on main thread:
+ *
+ * RIL_REQUEST_IMS_REGISTRATION_STATE
+  *
+ * "data" is NULL
+ *
+ */
+#define RIL_UNSOL_RESPONSE_IMS_NETWORK_STATE_CHANGED 1035
+
+
+/**
+ * RIL_UNSOL_RESPONSE_TETHERED_MODE_STATE_CHANGED
+ *
+ * Called when tethered mode is enabled or disabled
+ *
+ *
+ * "data" is an int 0 - tethered mode off, 1 - tethered mode on
+ *
+ */
+#define RIL_UNSOL_RESPONSE_TETHERED_MODE_STATE_CHANGED 1036
+
+/**
+ * RIL_UNSOL_RESPONSE_DATA_NETWORK_STATE_CHANGED
+ *
+ * Called when data network states has changed
+  *
+ * Callee will invoke the following requests on main thread:
+ *
+ * RIL_REQUEST_DATA_REGISTRATION_STATE
+  *
+ * "data" is NULL
+ *
+ */
+#define RIL_UNSOL_RESPONSE_DATA_NETWORK_STATE_CHANGED 1037
 
 /***********************************************************************/
 
