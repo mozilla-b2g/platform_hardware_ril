@@ -1206,7 +1206,8 @@ static void requestRegistrationState(int request, void *data,
 {
     int err;
     int *registration;
-    char *responseStr[REG_STATE_LEN];
+    char **responseStr;
+    RIL_RegistrationStates response;
     ATResponse *p_response = NULL;
     const char *cmd;
     const char *prefix;
@@ -1240,7 +1241,10 @@ static void requestRegistrationState(int request, void *data,
         }
         if (parseRegistrationState(cur->line, &type, &count, &registration)) goto error;
 
-        memset(responseStr, 0, sizeof(responseStr));
+        responseStr = malloc(REG_STATE_LEN * sizeof(char *));
+        if (!responseStr) goto error;
+        memset(responseStr, 0, REG_STATE_LEN * sizeof(char *));
+        response.records[i].regState = responseStr;
         if (type == RADIO_TECH_3GPP2) {
             LOGD("registration state type: 3GPP2");
             // TODO: Query modem
@@ -1267,15 +1271,18 @@ static void requestRegistrationState(int request, void *data,
             if (count > 3)
                 asprintf(&responseStr[3], "%d", registration[3]);
         }
+        response.records[i].numElements = numElements;
         asprintf(&responseStr[0], "%d", registration[0]);
         for (j = startfrom; j < numElements; j++) {
             if (!responseStr[i]) goto error;
         }
-        free(registration);
         registration = NULL;
     }
 
-    RIL_onRequestComplete(t, RIL_E_SUCCESS, responseStr, sizeof(responseStr));
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, &response, sizeof(response));
+    for (i = 0; i < RIL_MAX_NETWORKS; i++) {
+        free(response.records[i].regState);
+    }
     at_response_free(p_response);
 
     return;
