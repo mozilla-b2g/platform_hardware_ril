@@ -123,3 +123,4 @@
     {RIL_REQUEST_VOICE_RADIO_TECH, dispatchVoid, responseInts},
     {RIL_REQUEST_IMS_REGISTRATION_STATE, dispatchVoid, responseInts},
     {RIL_REQUEST_IMS_SEND_SMS, dispatchImsSms, responseSMS},
+    {RIL_REQUEST_GET_DATA_CALL_PROFILE, dispatchInts, responseGetDataCallProfile}
