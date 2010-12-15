@@ -148,8 +148,8 @@ static void onCancel (RIL_Token t);
 static const char *getVersion();
 static int isRadioOn();
 static SIM_Status getSIMStatus();
-static int getCardList(RIL_CardList **pp_card_list);
-static void freeCardList(RIL_CardList *p_card_list);
+static int getCardStatus(RIL_CardStatus **pp_card_status);
+static void freeCardStatus(RIL_CardStatus *p_card_status);
 static void onDataCallListChanged(void *param);
 
 extern const char * requestToString(int request);
@@ -1660,7 +1660,7 @@ static void  requestSIM_IO(void *data, size_t datalen, RIL_Token t)
     p_args = (RIL_SIM_IO *)data;
 
     /* FIXME handle pin2 */
-    /* FIXME handle slot and aidPtr */
+    /* FIXME handle aidPtr */
 
     if (p_args->data == NULL) {
         asprintf(&cmd, "AT+CRSM=%d,%d,%d,%d,%d",
@@ -1893,20 +1893,20 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
 
     switch (request) {
         case RIL_REQUEST_GET_SIM_STATUS: {
-            RIL_CardList *p_card_list;
+            RIL_CardStatus *p_card_status;
             char *p_buffer;
             int buffer_size;
 
-            int result = getCardList(&p_card_list);
+            int result = getCardStatus(&p_card_status);
             if (result == RIL_E_SUCCESS) {
-                p_buffer = (char *)p_card_list;
-                buffer_size = sizeof(*p_card_list);
+                p_buffer = (char *)p_card_status;
+                buffer_size = sizeof(*p_card_status);
             } else {
                 p_buffer = NULL;
                 buffer_size = 0;
             }
             RIL_onRequestComplete(t, result, p_buffer, buffer_size);
-            freeCardList(p_card_list);
+            freeCardStatus(p_card_status);
             break;
         }
         case RIL_REQUEST_GET_CURRENT_CALLS:
@@ -2484,10 +2484,10 @@ done:
 /**
  * Get the current card status.
  *
- * This must be freed using freeCardList.
+ * This must be freed using freeCardStatus.
  * @return: On success returns RIL_E_SUCCESS
  */
-static int getCardList(RIL_CardList **pp_card_list) {
+static int getCardStatus(RIL_CardStatus **pp_card_status) {
     static RIL_AppStatus app_status_array[] = {
         // SIM_ABSENT = 0
         { RIL_APPTYPE_UNKNOWN, RIL_APPSTATE_UNKNOWN, RIL_PERSOSUBSTATE_UNKNOWN,
@@ -2538,11 +2538,8 @@ static int getCardList(RIL_CardList **pp_card_list) {
         num_apps = 2;
     }
 
-    RIL_CardList *p_card_list = malloc(sizeof(RIL_CardList));
-    p_card_list->num_cards = 1;
-
     // Allocate and initialize base card status.
-    RIL_CardStatus *p_card_status = &(p_card_list->card[0]);
+    RIL_CardStatus *p_card_status = malloc(sizeof(RIL_CardStatus));
     p_card_status->card_state = card_state;
     p_card_status->universal_pin_state = RIL_PINSTATE_UNKNOWN;
     p_card_status->num_current_3gpp_indexes = 0;
@@ -2573,15 +2570,15 @@ static int getCardList(RIL_CardList **pp_card_list) {
         p_card_status->applications[1] = app_status_array[sim_status + RUIM_ABSENT];
     }
 
-    *pp_card_list = p_card_list;
+    *pp_card_status = p_card_status;
     return RIL_E_SUCCESS;
 }
 
 /**
- * Free the card list returned by getCardList
+ * Free the card status returned by getCardStatus
  */
-static void freeCardList(RIL_CardList *p_card_list) {
-    free(p_card_list);
+static void freeCardStatus(RIL_CardStatus *p_card_status) {
+    free(p_card_status);
 }
 
 /**

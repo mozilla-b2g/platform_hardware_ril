@@ -238,14 +238,12 @@ typedef struct {
 } RIL_Dial;
 
 typedef struct {
-    int              slot;       /* 0, 1, ... etc. */
     char             *aidPtr;    /* null terminated string, e.g., from 0xA0, 0x00
                                     0x41, 0x30*/
     char             *pin;
 } RIL_SimPin;
 
 typedef struct {
-    int              slot;       /* 0, 1, ... etc. */
     char             *aidPtr;    /* null terminated string, e.g., from 0xA0, 0x00
                                     0x41, 0x30*/
     char             *puk;
@@ -253,7 +251,6 @@ typedef struct {
 } RIL_SimPuk;
 
 typedef struct {
-    int              slot;       /* 0, 1, ... etc. */
     char             *aidPtr;    /* null terminated string, e.g., from 0xA0, 0x00
                                     0x41, 0x30*/
     char             *pin;
@@ -261,7 +258,6 @@ typedef struct {
 } RIL_SimPinSet;
 
 typedef struct {
-    int slot;       /* 0, 1, ... etc. */
     char *aidPtr;   /* null terminated string, e.g., from 0xA0, 0x00
                        0x41, 0x30. null for card files (outside the ADF)*/
     int command;    /* one of the commands listed for TS 27.007 +CRSM*/
@@ -406,7 +402,6 @@ typedef struct {
 } RIL_SuppSvcNotification;
 
 #define RIL_CARD_MAX_APPS     8
-#define RIL_MAX_CARDS         1
 
 typedef enum {
     RIL_CARDSTATE_ABSENT   = 0,
@@ -506,13 +501,6 @@ typedef struct
 
 typedef struct
 {
-    int num_cards;
-    RIL_CardStatus card[RIL_MAX_CARDS];
-} RIL_CardList;
-
-typedef struct
-{
-    int slot;       /* 0, 1, ... etc. */
     char *aid_ptr;  /* null terminated string, e.g., from 0xA0, 0x00
                        0x41, 0x30*/
 } RIL_RequestImsi;
@@ -528,7 +516,6 @@ typedef enum {
 
 typedef struct {
     RIL_SimRefreshResult     refreshResult;      /* Sim Refresh result */
-    int                      slot;               /* slot numbers 0, 1, ... etc. */
     char                    *aidPtr;             /* null terminated string, e.g., from 0xA0, 0x00
                                                     0x41, 0x30*/
     int                      efId;               /* EFID */
@@ -770,7 +757,7 @@ typedef struct {
  *
  * "data" is NULL
  *
- * "response" is const RIL_CardList *
+ * "response" is const RIL_CardStatus *
  *
  * Valid errors:
  *  Must never fail
@@ -1775,12 +1762,11 @@ typedef struct {
  * Query the status of a facility lock state
  *
  * "data" is const char **
- * ((const char **)data)[0] is the slot number (applies only in case of FDN, or "" otherwise)
- * ((const char **)data)[1] is the AID (applies only in case of FDN, or "" otherwise)
- * ((const char **)data)[2] is the facility string code from TS 27.007 7.4
+ * ((const char **)data)[0] is the AID (applies only in case of FDN, or "" otherwise)
+ * ((const char **)data)[1] is the facility string code from TS 27.007 7.4
  *                      (eg "AO" for BAOC, "SC" for SIM lock)
- * ((const char **)data)[3] is the password, or "" if not required
- * ((const char **)data)[4] is the TS 27.007 service class bit vector of
+ * ((const char **)data)[2] is the password, or "" if not required
+ * ((const char **)data)[3] is the TS 27.007 service class bit vector of
  *                           services to query
  *
  * "response" is an int *
@@ -1804,13 +1790,12 @@ typedef struct {
  *
  * "data" is const char **
  *
- * ((const char **)data)[0] is the slot number (applies only in case of FDN, or "" otherwise)
- * ((const char **)data)[1] is the AID (applies only in case of FDN, or "" otherwise)
- * ((const char **)data)[2] = facility string code from TS 27.007 7.4
+ * ((const char **)data)[0] is the AID (applies only in case of FDN, or "" otherwise)
+ * ((const char **)data)[1] = facility string code from TS 27.007 7.4
  * (eg "AO" for BAOC)
- * ((const char **)data)[3] = "0" for "unlock" and "1" for "lock"
- * ((const char **)data)[4] = password
- * ((const char **)data)[5] = string representation of decimal TS 27.007
+ * ((const char **)data)[2] = "0" for "unlock" and "1" for "lock"
+ * ((const char **)data)[3] = password
+ * ((const char **)data)[4] = string representation of decimal TS 27.007
  *                            service class bit vector. Eg, the string
  *                            "1" means "set this facility for voice services"
  *

@@ -676,7 +676,6 @@ invalid:
 /**
  * Callee expects const RIL_SIM_IO *
  * Payload is:
- *   int32_t slot
  *   String aidPtr
  *   int32_t command
  *   int32_t fileid
@@ -694,9 +693,6 @@ dispatchSIM_IO (Parcel &p, RequestInfo *pRI) {
     memset (&simIO, 0, sizeof(simIO));
 
     // note we only check status at the end
-
-    status = p.readInt32(&t);
-    simIO.slot = (int)t;
 
     simIO.aidPtr = strdupReadString(p);
 
@@ -721,8 +717,8 @@ dispatchSIM_IO (Parcel &p, RequestInfo *pRI) {
     simIO.pin2 = strdupReadString(p);
 
     startRequest;
-    appendPrintBuf("%sslot=%d,aid=%s,cmd=0x%X,efid=0x%X,path=%s,%d,%d,%d,%s,pin2=%s",
-        printBuf, simIO.slot, simIO.aidPtr,
+    appendPrintBuf("%said=%s,cmd=0x%X,efid=0x%X,path=%s,%d,%d,%d,%s,pin2=%s",
+        printBuf, simIO.aidPtr,
         simIO.command, simIO.fileid, (char*)simIO.path,
         simIO.p1, simIO.p2, simIO.p3,
         (char*)simIO.data,  (char*)simIO.pin2);
@@ -1340,7 +1336,6 @@ invalid:
 /**
 * Callee expects const RIL_RequestImsi *
 * Payload is:
-*   int32_t slot
 *   String aidPtr
 */
 static void
@@ -1353,14 +1348,11 @@ dispatchRequestImsi(Parcel &p, RequestInfo *pRI) {
 
     // note we only check status at the end
 
-    status = p.readInt32(&t);
-    getImsi.slot = (int)t;
-
     getImsi.aid_ptr = strdupReadString(p);
 
     startRequest;
-    appendPrintBuf("%sslot=%d,aid=%s",
-        printBuf, getImsi.slot, getImsi.aid_ptr);
+    appendPrintBuf("%said=%s",
+        printBuf, getImsi.aid_ptr);
     closeRequest;
     printRequest(pRI->token, pRI->pCI->requestNumber);
 
@@ -1391,7 +1383,6 @@ invalid:
 /**
 * Callee expects const RIL_SimPin *
 * Payload is:
-*   int32_t slot
 *   String aidPtr
 *   String Pin
 */
@@ -1405,16 +1396,13 @@ dispatchSimPin(Parcel &p, RequestInfo *pRI) {
 
     // note we only check status at the end
 
-    status = p.readInt32(&t);
-    simPin.slot = (int)t;
-
     simPin.aidPtr = strdupReadString(p);
     simPin.pin= strdupReadString(p);
 
 
     startRequest;
-    appendPrintBuf("%sslot=%d,aid=%s,pin=****",
-        printBuf, simPin.slot, simPin.aidPtr);
+    appendPrintBuf("%said=%s,pin=****",
+        printBuf, simPin.aidPtr);
     closeRequest;
     printRequest(pRI->token, pRI->pCI->requestNumber);
 
@@ -1448,7 +1436,6 @@ invalid:
 /**
 * Callee expects const RIL_SimPuk *
 * Payload is:
-*   int32_t slot
 *   String aidPtr
 *   String puk
 *   String newPin
@@ -1463,17 +1450,14 @@ dispatchSimPuk(Parcel &p, RequestInfo *pRI) {
 
     // note we only check status at the end
 
-    status = p.readInt32(&t);
-    simPuk.slot = (int)t;
-
     simPuk.aidPtr = strdupReadString(p);
     simPuk.puk= strdupReadString(p);
     simPuk.newPin= strdupReadString(p);
 
 
     startRequest;
-    appendPrintBuf("%sslot=%d,aid=%s,puk=****,new_pin=****",
-        printBuf, simPuk.slot, simPuk.aidPtr);
+    appendPrintBuf("%said=%s,puk=****,new_pin=****",
+        printBuf, simPuk.aidPtr);
     closeRequest;
     printRequest(pRI->token, pRI->pCI->requestNumber);
 
@@ -1510,7 +1494,6 @@ invalid:
 /**
 * Callee expects const RIL_SimPinSet *
 * Payload is:
-*   int32_t slot
 *   String aidPtr
 *   String pin
 *   String newPin
@@ -1525,17 +1508,14 @@ dispatchSimPinSet(Parcel &p, RequestInfo *pRI) {
 
     // note we only check status at the end
 
-    status = p.readInt32(&t);
-    simPinSet.slot = (int)t;
-
     simPinSet.aidPtr = strdupReadString(p);
     simPinSet.pin= strdupReadString(p);
     simPinSet.newPin= strdupReadString(p);
 
 
     startRequest;
-    appendPrintBuf("%sslot=%d,aid=%s,puk=****,new_pin=****",
-        printBuf, simPinSet.slot, simPinSet.aidPtr);
+    appendPrintBuf("%said=%s,puk=****,new_pin=****",
+        printBuf, simPinSet.aidPtr);
     closeRequest;
     printRequest(pRI->token, pRI->pCI->requestNumber);
 
@@ -1798,14 +1778,12 @@ static int responseSimRefresh(Parcel &p, void *response, size_t responselen) {
     RIL_SimRefresh *p_cur = ((RIL_SimRefresh*)response);
 
     p.writeInt32(p_cur->refreshResult);
-    p.writeInt32(p_cur->slot);
     writeStringToParcel(p, p_cur->aidPtr);
     p.writeInt32(p_cur->efId);
 
-    appendPrintBuf("%s%d,%d,%s,%d",
+    appendPrintBuf("%s%d,%s,%d",
                    printBuf, p_cur->refreshResult,
-                   p_cur->slot, p_cur->aidPtr,
-                   p_cur->efId);
+                   p_cur->aidPtr, p_cur->efId);
 
     closeResponse;
 
@@ -2441,60 +2419,55 @@ static void rilEventAddWakeup(struct ril_event *ev) {
 }
 
 static int responseSimStatus(Parcel &p, void *response, size_t responselen) {
-    int i, j;
+    int i;
 
     if (response == NULL && responselen != 0) {
         LOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
-    if (responselen % sizeof (RIL_CardList *) != 0) {
+    if (responselen % sizeof (RIL_CardStatus *) != 0) {
         LOGE("invalid response length %d expected multiple of %d\n",
-            (int)responselen, (int)sizeof (RIL_CardList *));
+            (int)responselen, (int)sizeof (RIL_CardStatus *));
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
+    RIL_CardStatus *p_cur = ((RIL_CardStatus *) response);
+
+    p.writeInt32(p_cur->card_state);
+    p.writeInt32(p_cur->universal_pin_state);
+    p.writeInt32(p_cur->num_current_3gpp_indexes);
+    for (i = 0; i < p_cur->num_current_3gpp_indexes; i++) {
+        p.writeInt32(p_cur->subscription_3gpp_app_index[i]);
+    }
+    p.writeInt32(p_cur->num_current_3gpp2_indexes);
+    for (i = 0; i < p_cur->num_current_3gpp2_indexes; i++) {
+        p.writeInt32(p_cur->subscription_3gpp2_app_index[i]);
+    }
+    p.writeInt32(p_cur->num_applications);
+
     startResponse;
-    RIL_CardList *p_cl = ((RIL_CardList *) response);
-    p.writeInt32(p_cl->num_cards);
-
-    for (i = 0; i < p_cl->num_cards; i++) {
-        RIL_CardStatus *p_cur = &(p_cl->card[i]);
-
-        p.writeInt32(p_cur->card_state);
-        p.writeInt32(p_cur->universal_pin_state);
-        p.writeInt32(p_cur->num_current_3gpp_indexes);
-        for (j = 0; j < p_cur->num_current_3gpp_indexes; j++) {
-            p.writeInt32(p_cur->subscription_3gpp_app_index[j]);
-        }
-        p.writeInt32(p_cur->num_current_3gpp2_indexes);
-        for (j = 0; j < p_cur->num_current_3gpp2_indexes; j++) {
-            p.writeInt32(p_cur->subscription_3gpp2_app_index[j]);
-        }
-        p.writeInt32(p_cur->num_applications);
-
-        for (j = 0; j < p_cur->num_applications; j++) {
-            p.writeInt32(p_cur->applications[j].app_type);
-            p.writeInt32(p_cur->applications[j].app_state);
-            p.writeInt32(p_cur->applications[j].perso_substate);
-            writeStringToParcel(p, (const char*)(p_cur->applications[j].aid_ptr));
-            writeStringToParcel(p, (const char*)
-                                          (p_cur->applications[j].app_label_ptr));
-            p.writeInt32(p_cur->applications[j].pin1_replaced);
-            p.writeInt32(p_cur->applications[j].pin1);
-            p.writeInt32(p_cur->applications[j].pin2);
-            appendPrintBuf("%s[app_type=%d,app_state=%d,perso_substate=%d,\
-                    aid_ptr=%s,app_label_ptr=%s,pin1_replaced=%d,pin1=%d,pin2=%d],",
-                    printBuf,
-                    p_cur->applications[j].app_type,
-                    p_cur->applications[j].app_state,
-                    p_cur->applications[j].perso_substate,
-                    p_cur->applications[j].aid_ptr,
-                    p_cur->applications[j].app_label_ptr,
-                    p_cur->applications[j].pin1_replaced,
-                    p_cur->applications[j].pin1,
-                    p_cur->applications[j].pin2);
-        }
+    for (i = 0; i < p_cur->num_applications; i++) {
+        p.writeInt32(p_cur->applications[i].app_type);
+        p.writeInt32(p_cur->applications[i].app_state);
+        p.writeInt32(p_cur->applications[i].perso_substate);
+        writeStringToParcel(p, (const char*)(p_cur->applications[i].aid_ptr));
+        writeStringToParcel(p, (const char*)
+                                      (p_cur->applications[i].app_label_ptr));
+        p.writeInt32(p_cur->applications[i].pin1_replaced);
+        p.writeInt32(p_cur->applications[i].pin1);
+        p.writeInt32(p_cur->applications[i].pin2);
+        appendPrintBuf("%s[app_type=%d,app_state=%d,perso_substate=%d,\
+                aid_ptr=%s,app_label_ptr=%s,pin1_replaced=%d,pin1=%d,pin2=%d],",
+                printBuf,
+                p_cur->applications[i].app_type,
+                p_cur->applications[i].app_state,
+                p_cur->applications[i].perso_substate,
+                p_cur->applications[i].aid_ptr,
+                p_cur->applications[i].app_label_ptr,
+                p_cur->applications[i].pin1_replaced,
+                p_cur->applications[i].pin1,
+                p_cur->applications[i].pin2);
     }
     closeResponse;
 
