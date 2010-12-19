@@ -2,6 +2,7 @@
 #
 # not currently building V8 for x86 targets
 
+ifeq (0, 1)
 ifneq ($(BUILD_TINY_ANDROID),true)
 
 LOCAL_PATH:= $(call my-dir)
@@ -95,4 +96,5 @@ LOCAL_SRC_FILES := $(call all-java-files-under, $(src_java) $(gen_src_java))
 
 include $(BUILD_STATIC_JAVA_LIBRARY)
 # =======================================================
+endif
 endif
