@@ -2235,7 +2235,6 @@ static int responseRilSignalStrength(Parcel &p,
         LOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
-
     if (responselen == sizeof (RIL_SignalStrength)) {
         // New RIL
         RIL_SignalStrength *p_cur = ((RIL_SignalStrength *) response);
@@ -2247,12 +2246,17 @@ static int responseRilSignalStrength(Parcel &p,
         p.writeInt32(p_cur->EVDO_SignalStrength.dbm);
         p.writeInt32(p_cur->EVDO_SignalStrength.ecio);
         p.writeInt32(p_cur->EVDO_SignalStrength.signalNoiseRatio);
+        p.writeInt32(p_cur->LTE_SignalStrength.signalStrength);
+        p.writeInt32(p_cur->LTE_SignalStrength.rsrp);
+        p.writeInt32(p_cur->LTE_SignalStrength.rsrq);
 
         startResponse;
-        appendPrintBuf("%s[signalStrength=%d,bitErrorRate=%d,\
+        appendPrintBuf("%s[GW_SignalStrength =%d,GW_SignalStrength.bitErrorRate=%d,\
                 CDMA_SignalStrength.dbm=%d,CDMA_SignalStrength.ecio=%d,\
                 EVDO_SignalStrength.dbm =%d,EVDO_SignalStrength.ecio=%d,\
-                EVDO_SignalStrength.signalNoiseRatio=%d]",
+                EVDO_SignalStrength.signalNoiseRatio=%d,\
+                LTE_SignalStrength.signalStrength =%d,LTE_SignalStrength.rsrp=%d,\
+                LTE_SignalStrength.rsrq=%d]",
                 printBuf,
                 p_cur->GW_SignalStrength.signalStrength,
                 p_cur->GW_SignalStrength.bitErrorRate,
@@ -2260,19 +2264,20 @@ static int responseRilSignalStrength(Parcel &p,
                 p_cur->CDMA_SignalStrength.ecio,
                 p_cur->EVDO_SignalStrength.dbm,
                 p_cur->EVDO_SignalStrength.ecio,
-                p_cur->EVDO_SignalStrength.signalNoiseRatio);
-
+                p_cur->EVDO_SignalStrength.signalNoiseRatio,
+                p_cur->LTE_SignalStrength.signalStrength,
+                p_cur->LTE_SignalStrength.rsrp,
+                p_cur->LTE_SignalStrength.rsrq);
         closeResponse;
 
     } else if (responselen % sizeof (int) == 0) {
         // Old RIL deprecated
         int *p_cur = (int *) response;
-
         startResponse;
 
         // With the Old RIL we see one or 2 integers.
         size_t num = responselen / sizeof (int); // Number of integers from ril
-        size_t totalIntegers = 7; // Number of integers in RIL_SignalStrength
+        size_t totalIntegers = 10; // Number of integers in RIL_SignalStrength
         size_t i;
 
         appendPrintBuf("%s[", printBuf);
@@ -2280,12 +2285,11 @@ static int responseRilSignalStrength(Parcel &p,
             appendPrintBuf("%s %d", printBuf, *p_cur);
             p.writeInt32(*p_cur++);
         }
-        appendPrintBuf("%s]", printBuf);
-
         // Fill the remainder with zero's.
         for (; i < totalIntegers; i++) {
             p.writeInt32(0);
         }
+        appendPrintBuf("%s]", printBuf);
 
         closeResponse;
     } else {
