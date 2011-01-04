@@ -116,104 +116,6 @@ typedef enum {
     CDMA_SSRC_NV = 0,
     CDMA_SSRC_RUIM = 1,
 } RIL_CdmaSubscriptionSource;
-/*
- * ((const char **)response)[0] is registration state 0-6,
- *              0 - Not registered, MT is not currently searching
- *                  a new operator to register
- *              1 - Registered, home network
- *              2 - Not registered, but MT is currently searching
- *                  a new operator to register
- *              3 - Registration denied
- *              4 - Unknown
- *              5 - Registered, roaming
- *             10 - Same as 0, but indicates that emergency calls
- *                  are enabled.
- *             12 - Same as 2, but indicates that emergency calls
- *                  are enabled.
- *             13 - Same as 3, but indicates that emergency calls
- *                  are enabled.
- *             14 - Same as 4, but indicates that emergency calls
- *                  are enabled.
- *
- * ((const char **)response)[1] is LAC if registered on a GSM/WCDMA system or
- *                              NULL if not.Valid LAC are 0x0000 - 0xffff
- * ((const char **)response)[2] is CID if registered on a * GSM/WCDMA or
- *                              NULL if not.
- *                                 Valid CID are 0x00000000 - 0xffffffff
- *                                    In GSM, CID is Cell ID (see TS 27.007)
- *                                            in 16 bits
- *                                    In UMTS, CID is UMTS Cell Identity
- *                                             (see TS 25.331) in 28 bits
- * ((const char **)response)[3] indicates the available radio technology.
- *                              Valid values asm given in RIL_RadioTechnology enum
- * ((const char **)response)[4] is Base Station ID if registered on a CDMA
- *                              system or NULL if not.  Base Station ID in
- *                              decimal format
- * ((const char **)response)[5] is Base Station latitude if registered on a
- *                              CDMA system or NULL if not. Base Station
- *                              latitude is a decimal number as specified in
- *                              3GPP2 C.S0005-A v6.0. It is represented in
- *                              units of 0.25 seconds and ranges from -1296000
- *                              to 1296000, both values inclusive (corresponding
- *                              to a range of -90° to +90°).
- * ((const char **)response)[6] is Base Station longitude if registered on a
- *                              CDMA system or NULL if not. Base Station
- *                              longitude is a decimal number as specified in
- *                              3GPP2 C.S0005-A v6.0. It is represented in
- *                              units of 0.25 seconds and ranges from -2592000
- *                              to 2592000, both values inclusive (corresponding
- *                              to a range of -180° to +180°).
- * ((const char **)response)[7] is concurrent services support indicator if
- *                              registered on a CDMA system 0-1.
- *                                   0 - Concurrent services not supported,
- *                                   1 - Concurrent services supported
- * ((const char **)response)[8] is System ID if registered on a CDMA system or
- *                              NULL if not. Valid System ID are 0 - 32767
- * ((const char **)response)[9] is Network ID if registered on a CDMA system or
- *                              NULL if not. Valid System ID are 0 - 65535
- * ((const char **)response)[10] is the TSB-58 Roaming Indicator if registered
- *                               on a CDMA or EVDO system or NULL if not. Valid values
- *                               are 0-255.
- * ((const char **)response)[11] indicates whether the current system is in the
- *                               PRL if registered on a CDMA or EVDO system or NULL if
- *                               not. 0=not in the PRL, 1=in the PRL
- * ((const char **)response)[12] is the default Roaming Indicator from the PRL,
- *                               if registered on a CDMA or EVDO system or NULL if not.
- *                               Valid values are 0-255.
- * ((const char **)response)[13] if registration state is 3 (Registration
- *                               denied) this is an enumerated reason why
- *                               registration was denied.  See 3GPP TS 24.008,
- *                               10.5.3.6 and Annex G.
- *                                 0 - General
- *                                 1 - Authentication Failure
- *                                 2 - IMSI unknown in HLR
- *                                 3 - Illegal MS
- *                                 4 - Illegal ME
- *                                 5 - PLMN not allowed
- *                                 6 - Location area not allowed
- *                                 7 - Roaming not allowed
- *                                 8 - No Suitable Cells in this Location Area
- *                                 9 - Network failure
- *                                10 - Persistent location update reject
- *
- * Please note that registration state 4 ("unknown") is treated
- * as "out of service" in the Android telephony system
- *
- * Registration state 3 can be returned if Location Update Reject
- * (with cause 17 - Network Failure) is received repeatedly from the network,
- * to facilitate "managed roaming"
- */
-
-#define RIL_MAX_NETWORKS    2     /* Maximum number of voice, data networks possible */
-
-typedef struct {
-    int numElements;                    // No. of elements in following array
-    char **regState;                    // Registration states for voice or data
-} RIL_RegistrationStateRecord;
-
-typedef struct {
-    RIL_RegistrationStateRecord records[RIL_MAX_NETWORKS];
-} RIL_RegistrationStates;
 
 /* User-to-User signaling Info activation types derived from 3GPP 23.087 v8.0 */
 typedef enum {
@@ -1242,8 +1144,115 @@ typedef struct {
  * Request current registration state
  *
  * "data" is NULL
- * "response" is a "const RIL_RegistrationStates*"
+ * "response" is a "char **"
+ * ((const char **)response)[0] is registration state 0-6,
+ *              0 - Not registered, MT is not currently searching
+ *                  a new operator to register
+ *              1 - Registered, home network
+ *              2 - Not registered, but MT is currently searching
+ *                  a new operator to register
+ *              3 - Registration denied
+ *              4 - Unknown
+ *              5 - Registered, roaming
+ *             10 - Same as 0, but indicates that emergency calls
+ *                  are enabled.
+ *             12 - Same as 2, but indicates that emergency calls
+ *                  are enabled.
+ *             13 - Same as 3, but indicates that emergency calls
+ *                  are enabled.
+ *             14 - Same as 4, but indicates that emergency calls
+ *                  are enabled.
  *
+ * ((const char **)response)[1] is LAC if registered on a GSM/WCDMA system or
+ *                              NULL if not.Valid LAC are 0x0000 - 0xffff
+ * ((const char **)response)[2] is CID if registered on a * GSM/WCDMA or
+ *                              NULL if not.
+*                                 Valid CID are 0x00000000 - 0xffffffff
+ *                                    In GSM, CID is Cell ID (see TS 27.007)
+ *                                            in 16 bits
+ *                                    In UMTS, CID is UMTS Cell Identity
+ *                                             (see TS 25.331) in 28 bits
+ * ((const char **)response)[3] indicates the available voice radio technology,
+ *                              valid values as defined by RIL_RadioTechnology.
+ * ((const char **)response)[4] is Base Station ID if registered on a CDMA
+ *                              system or NULL if not.  Base Station ID in
+ *                              decimal format
+ * ((const char **)response)[5] is Base Station latitude if registered on a
+ *                              CDMA system or NULL if not. Base Station
+ *                              latitude is a decimal number as specified in
+ *                              3GPP2 C.S0005-A v6.0. It is represented in
+ *                              units of 0.25 seconds and ranges from -1296000
+ *                              to 1296000, both values inclusive (corresponding
+ *                              to a range of -90° to +90°).
+ * ((const char **)response)[6] is Base Station longitude if registered on a
+ *                              CDMA system or NULL if not. Base Station
+ *                              longitude is a decimal number as specified in
+ *                              3GPP2 C.S0005-A v6.0. It is represented in
+ *                              units of 0.25 seconds and ranges from -2592000
+ *                              to 2592000, both values inclusive (corresponding
+ *                              to a range of -180° to +180°).
+ * ((const char **)response)[7] is concurrent services support indicator if
+ *                              registered on a CDMA system 0-1.
+ *                                   0 - Concurrent services not supported,
+ *                                   1 - Concurrent services supported
+ * ((const char **)response)[8] is System ID if registered on a CDMA system or
+ *                              NULL if not. Valid System ID are 0 - 32767
+ * ((const char **)response)[9] is Network ID if registered on a CDMA system or
+ *                              NULL if not. Valid System ID are 0 - 65535
+ * ((const char **)response)[10] is the TSB-58 Roaming Indicator if registered
+ *                               on a CDMA or EVDO system or NULL if not. Valid values
+ *                               are 0-255.
+ * ((const char **)response)[11] indicates whether the current system is in the
+ *                               PRL if registered on a CDMA or EVDO system or NULL if
+ *                               not. 0=not in the PRL, 1=in the PRL
+ * ((const char **)response)[12] is the default Roaming Indicator from the PRL,
+ *                               if registered on a CDMA or EVDO system or NULL if not.
+ *                               Valid values are 0-255.
+ * ((const char **)response)[13] if registration state is 3 (Registration
+ *                               denied) this is an enumerated reason why
+*                               registration was denied.  See 3GPP TS 24.008,
+ *                               10.5.3.6 and Annex G.
+ *                                0 - General
+ *                                1 - Authentication Failure
+ *                                2 - IMSI unknown in HLR
+ *                                3 - Illegal MS
+ *                                4 - IMSI unknown in VLR
+ *                                5 - IMEI not accepted
+ *                                6 - Illegal ME
+ *                               11 - PLMN not allowed
+ *                               12 - Location area not allowed
+ *                               13 - Roaming not allowed in this Location Area
+ *                               15 - No Suitable Cells in this Location Area
+ *                               17 - Network Failure
+ *                               20 - MAC Failure
+ *                               21 - Sync Failure
+ *                               22 - Congestion
+ *                               23 - GSM Authentication unacceptable
+ *                               25 - Not Authorized for this CSG
+ *                               32 - Service option not supported
+ *                               33 - Requested service option not subscribed
+ *                               34 - Service option temporarily out of order
+ *                               38 - Call cannot be identified
+ *                               48-63 - Retry upon entry into a new cell
+ *                               95 - Semantically incorrect message
+ *                               96 - Invalid mandatory information
+ *                               97 - Message type non-existent or not implemented
+ *                               98 - Message not compatible with protocol state
+ *                               99 - Information element non-existent or not implemented
+ *                              100 - Conditional IE error
+ *                              101 - Message not compatible with protocol state
+ *                              111 - Protocol error, unspecified
+ * ((const char **)response)[14] is the Primary Scrambling Code of the current
+ *                               cell as described in TS 25.331, in hexadecimal
+ *                               format, or NULL if unknown or not registered
+ *                               to a UMTS network.
+ *
+ * Please note that registration state 4 ("unknown") is treated
+ * as "out of service" in the Android telephony system
+ *
+ * Registration state 3 can be returned if Location Update Reject
+ * (with cause 17 - Network Failure) is received repeatedly from the network,
+ * to facilitate "managed roaming"
  *
  * Valid errors:
  *  SUCCESS
@@ -1258,8 +1267,32 @@ typedef struct {
  * Request current registration state for data networks.
  *
  * "data" is NULL
- * "response" is a "const RIL_RegistrationStates*"
+ * "response" is a "char **"
+ * ((const char **)response)[0] is registration state 0-5 from TS 27.007 10.1.20 AT+CGREG
+ * ((const char **)response)[1] is LAC if registered or NULL if not
+ * ((const char **)response)[2] is CID if registered or NULL if not
+ * ((const char **)response)[3] indicates the available data radio technology,
+ *                              valid values as defined by RIL_RadioTechnology.
+ * ((const char **)response)[4] if registration state is 3 (Registration
+ *                               denied) this is an enumerated reason why
+ *                               registration was denied.  See 3GPP TS 24.008,
+ *                               Annex G.6 "Additonal cause codes for GMM".
+ *      7 == GPRS services not allowed
+ *      8 == GPRS services and non-GPRS services not allowed
+ *      9 == MS identity cannot be derived by the network
+ *      10 == Implicitly detached
+ *      14 == GPRS services not allowed in this PLMN
+ *      16 == MSC temporarily not reachable
+ *      40 == No PDP context activated
+ * ((const char **)response)[5] The maximum number of simultaneous Data Calls that can be
+ *                              established using RIL_REQUEST_SETUP_DATA_CALL.
  *
+ * LAC and CID are in hexadecimal format.
+ * valid LAC are 0x0000 - 0xffff
+ * valid CID are 0x00000000 - 0x0fffffff
+ *
+ * Please note that registration state 4 ("unknown") is treated
+ * as "out of service" in the Android telephony system
  *
  * Valid errors:
  *  SUCCESS

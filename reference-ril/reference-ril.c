@@ -1199,60 +1199,57 @@ error:
     return -1;
 }
 
-#define REG_STATE_LEN 14
-#define MAX_NETWORKS 1
+#define REG_STATE_LEN 15
+#define REG_DATA_STATE_LEN 6
 static void requestRegistrationState(int request, void *data,
                                         size_t datalen, RIL_Token t)
 {
     int err;
     int *registration;
     char **responseStr;
-    RIL_RegistrationStates response;
     ATResponse *p_response = NULL;
     const char *cmd;
     const char *prefix;
-    char *line, *p;
-    int responselen = 0;
+    char *line;
     int i = 0, j, numElements;
     int count = 3;
-    ATLine *cur;
     int type, startfrom;
 
     LOGD("requestRegistrationState");
     if (request == RIL_REQUEST_REGISTRATION_STATE) {
         cmd = "AT+CREG?";
         prefix = "+CREG:";
+        numElements = REG_STATE_LEN;
     } else if (request == RIL_REQUEST_DATA_REGISTRATION_STATE) {
         cmd = "AT+CGREG?";
         prefix = "+CGREG:";
+        numElements = REG_DATA_STATE_LEN;
     } else {
         assert(0);
         goto error;
     }
 
-    err = at_send_command_multiline(cmd, prefix, &p_response);
+    err = at_send_command_singleline(cmd, prefix, &p_response);
 
     if (err != 0) goto error;
 
-    memset(&response, 0, sizeof(response));
+    line = p_response->p_intermediates->line;
 
-    for (cur = p_response->p_intermediates, i = 0; cur; cur = cur->p_next, i++) {
-        if (i >= MAX_NETWORKS) {
-            LOGI("Registration %d ignored [max networks: %d]: %s", i, MAX_NETWORKS, cur->line);
-            continue;
-        }
-        if (parseRegistrationState(cur->line, &type, &count, &registration)) goto error;
+    if (parseRegistrationState(line, &type, &count, &registration)) goto error;
 
-        responseStr = malloc(REG_STATE_LEN * sizeof(char *));
-        if (!responseStr) goto error;
-        memset(responseStr, 0, REG_STATE_LEN * sizeof(char *));
-        response.records[i].regState = responseStr;
-        if (type == RADIO_TECH_3GPP2) {
-            LOGD("registration state type: 3GPP2");
-            // TODO: Query modem
-            startfrom = 3;
-            numElements = REG_STATE_LEN;
-            responseStr = response.records[i].regState = calloc(numElements,sizeof(char *));
+    responseStr = malloc(numElements * sizeof(char *));
+    if (!responseStr) goto error;
+    memset(responseStr, 0, numElements * sizeof(char *));
+    /**
+     * The first '4' bytes for both registration states remain the same.
+     * But if the request is 'DATA_REGISTRATION_STATE',
+     * the 5th and 6th byte(s) are optional.
+     */
+    if (type == RADIO_TECH_3GPP2) {
+        LOGD("registration state type: 3GPP2");
+        // TODO: Query modem
+        startfrom = 3;
+        if(request == RIL_REQUEST_REGISTRATION_STATE) {
             asprintf(&responseStr[3], "8");     // EvDo revA
             asprintf(&responseStr[4], "1");     // BSID
             asprintf(&responseStr[5], "123");   // Latitude
@@ -1264,48 +1261,54 @@ static void requestRegistrationState(int request, void *data,
             asprintf(&responseStr[11], "1");    // System is in PRL
             asprintf(&responseStr[12], "0");    // Default Roaming indicator
             asprintf(&responseStr[13], "0");    // Reason for denial
-        } else { // type == RADIO_TECH_3GPP
-            LOGD("registration state type: 3GPP");
-            if (numElements > REG_STATE_LEN)
-                numElements = REG_STATE_LEN;
-            responseStr = response.records[i].regState = calloc(numElements,sizeof(char *));
-            startfrom = 0;
-            asprintf(&responseStr[1], "%x", registration[1]);
-            asprintf(&responseStr[2], "%x", registration[2]);
-            if (count > 3)
-                asprintf(&responseStr[3], "%d", registration[3]);
-        }
-        response.records[i].numElements = numElements;
-        asprintf(&responseStr[0], "%d", registration[0]);
-        for (j = startfrom; j < numElements; j++) {
-            if (!responseStr[i]) goto error;
-        }
-        free(registration);
-        registration = NULL;
+            asprintf(&responseStr[14], "0");    // Primary Scrambling Code of Current cell
+      } else if (request == RIL_REQUEST_DATA_REGISTRATION_STATE) {
+            asprintf(&responseStr[3], "8");   // Available data radio technology
+      }
+    } else { // type == RADIO_TECH_3GPP
+        LOGD("registration state type: 3GPP");
+        startfrom = 0;
+        asprintf(&responseStr[1], "%x", registration[1]);
+        asprintf(&responseStr[2], "%x", registration[2]);
+        if (count > 3)
+            asprintf(&responseStr[3], "%d", registration[3]);
+    }
+    asprintf(&responseStr[0], "%d", registration[0]);
+
+    /**
+     * Optional bytes for DATA_REGISTRATION_STATE request
+     * 4th byte : Registration denial code
+     * 5th byte : The max. number of simultaneous Data Calls
+     */
+    if(request == RIL_REQUEST_DATA_REGISTRATION_STATE) {
+        // asprintf(&responseStr[4], "3");
+        // asprintf(&responseStr[5], "1");
     }
 
-    RIL_onRequestComplete(t, RIL_E_SUCCESS, &response, sizeof(response));
-    for (i = 0; i < RIL_MAX_NETWORKS; i++) {
-        for (j = 0; j < response.records[i].numElements; j++ ) {
-            free(response.records[i].regState[j]);
-            response.records[i].regState[j] = NULL;
-        }
-        free(response.records[i].regState);
-        response.records[i].regState = NULL;
+    for (j = startfrom; j < numElements; j++) {
+        if (!responseStr[i]) goto error;
     }
+    free(registration);
+    registration = NULL;
+
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, responseStr, numElements*sizeof(responseStr));
+    for (j = 0; j < numElements; j++ ) {
+        free(responseStr[j]);
+        responseStr[j] = NULL;
+    }
+    free(responseStr);
+    responseStr = NULL;
     at_response_free(p_response);
 
     return;
 error:
-    for (i = 0; i < RIL_MAX_NETWORKS; i++) {
-        if (response.records[i].regState) {
-            for (j = 0; j < response.records[i].numElements; j++) {
-                free(response.records[i].regState[j]);
-                response.records[i].regState[j] = NULL;
-            }
-            free(response.records[i].regState);
-            response.records[i].regState = NULL;
+    if (responseStr) {
+        for (j = 0; j < numElements; j++) {
+            free(responseStr[j]);
+            responseStr[j] = NULL;
         }
+        free(responseStr);
+        responseStr = NULL;
     }
     LOGE("requestRegistrationState must never return an error when radio is on");
     RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);

@@ -228,7 +228,6 @@ static int responseDataCallList(Parcel &p, void *response, size_t responselen);
 static int responseRaw(Parcel &p, void *response, size_t responselen);
 static int responseSsn(Parcel &p, void *response, size_t responselen);
 static int responseSimStatus(Parcel &p, void *response, size_t responselen);
-static int responseRegState(Parcel &p, void *response, size_t responselen);
 static int responseGsmBrSmsCnf(Parcel &p, void *response, size_t responselen);
 static int responseCdmaBrSmsCnf(Parcel &p, void *response, size_t responselen);
 static int responseCdmaSms(Parcel &p, void *response, size_t responselen);
@@ -2448,40 +2447,6 @@ static int responseSimStatus(Parcel &p, void *response, size_t responselen) {
         }
     }
     closeResponse;
-
-    return 0;
-}
-
-// responseRegState() - Process response to RIL_REQUEST_REGISTRATION_STATE (voice only) or
-//                      RIL_REQUEST_DATA_REGISTRATION_STATE. The code below will work for 0, 1,
-//                      or 2 sets of registration state information, but the expectation is
-//                      that there will never be more than 1 set for voice.
-
-static int responseRegState(Parcel &p, void *response, size_t responselen) {
-
-    if (response == NULL) {
-        LOGE("invalid NULL response");
-
-        return RIL_ERRNO_INVALID_RESPONSE;
-    }
-
-    RIL_RegistrationStates *p_cur = (RIL_RegistrationStates *)response;
-
-    if (responselen != sizeof(*p_cur)) {
-        LOGE("invalid response length %d expected %d\n", (int)responselen, (int)sizeof(*p_cur));
-
-        return RIL_ERRNO_INVALID_RESPONSE;
-    }
-
-    for (int i = 0; i < RIL_MAX_NETWORKS; i++) {
-
-        int numElements = p_cur->records[i].numElements;
-        p.writeInt32(numElements);
-
-        for (int j = 0; j < numElements; j++) {
-            writeStringToParcel(p, p_cur->records[i].regState[j]);
-        }
-    }
 
     return 0;
 }
