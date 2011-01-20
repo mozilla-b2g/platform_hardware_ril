@@ -1010,7 +1010,7 @@ static void requestCdmaSetSubscriptionSource(int request, void *data,
 
     RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
 
-    RIL_onUnsolicitedResponse(RIL_UNSOL_CDMA_SUBSCRIPTION_SOURCE_CHANGED, NULL, 0);
+    RIL_onUnsolicitedResponse(RIL_UNSOL_CDMA_SUBSCRIPTION_SOURCE_CHANGED, &ss, sizeof(int *));
 
     return;
 error:
@@ -1042,7 +1042,6 @@ static void requestCdmaSubscription(int request, void *data,
 
     return;
 error:
-    LOGE("requestRegistrationState must never return an error when radio is on");
     RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 }
 
@@ -1212,12 +1211,12 @@ static void requestRegistrationState(int request, void *data,
 {
     int err;
     int *registration;
-    char **responseStr;
+    char **responseStr = NULL;
     ATResponse *p_response = NULL;
     const char *cmd;
     const char *prefix;
     char *line;
-    int i = 0, j, numElements;
+    int i = 0, j = 0, numElements = 0;
     int count = 3;
     int type, startfrom;
 
@@ -2172,14 +2171,6 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
             requestGetPreferredNetworkType(request, data, datalen, t);
             break;
 
-        /* CDMA Specific Requests */
-        case RIL_REQUEST_CDMA_PRL_VERSION:
-        {
-            if (TECH_BIT(sMdmInfo) == MDM_CDMA) {
-                requestCdmaPrlVersion(request, data, datalen, t);
-                break;
-            }
-        }
         case RIL_REQUEST_BASEBAND_VERSION:
             if (TECH_BIT(sMdmInfo) == MDM_CDMA) {
                 requestCdmaBaseBandVersion(request, data, datalen, t);
@@ -3011,7 +3002,7 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
             return;
         }
         SSOURCE(sMdmInfo) = source;
-        RIL_onUnsolicitedResponse(RIL_UNSOL_CDMA_SUBSCRIPTION_SOURCE_CHANGED, NULL, 0);
+        RIL_onUnsolicitedResponse(RIL_UNSOL_CDMA_SUBSCRIPTION_SOURCE_CHANGED, &source, sizeof(int *));
     } else if (strStartsWith(s, "+WSOS: ")) {
         char state = 0;
         int unsol;

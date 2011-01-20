@@ -95,6 +95,15 @@ typedef enum {
     RADIO_TECH_3GPP2 = 2 /* 3GPP2 Technologies - CDMA, EVDO */
 } RIL_RadioTechnologyFamily;
 
+/* RIL_CdmaSubscriptionSource
+ * Specifies where the subscription information for CDMA is taken from
+ */
+typedef enum {
+    CDMA_SUBSCRIPTION_SOURCE_RUIM_SIM = 0, /* RUIM/SIM Card provide subscription information*/
+    CDMA_SUBSCRIPTION_SOURCE_NV = 1,       /* Non-volatile RAM in the device
+                                              contains the subscription information*/
+} RIL_CdmaSubscriptionSource;
+
 typedef enum {
     RADIO_TECH_UNKNOWN = 0,
     RADIO_TECH_GPRS = 1,
@@ -112,11 +121,6 @@ typedef enum {
     RADIO_TECH_EHRPD = 13,
     RADIO_TECH_LTE = 14
 } RIL_RadioTechnology;
-
-typedef enum {
-    CDMA_SSRC_NV = 0,
-    CDMA_SSRC_RUIM = 1,
-} RIL_CdmaSubscriptionSource;
 
 /* User-to-User signaling Info activation types derived from 3GPP 23.087 v8.0 */
 typedef enum {
@@ -2594,8 +2598,7 @@ typedef struct {
  * be retrieved
  *
  * "data" is int *
- * ((int *)data)[0] is == 0 from RUIM/SIM (default)
- * ((int *)data)[0] is == 1 from NV
+ * ((int *)data)[0] is == RIL_CdmaSubscriptionSource
  *
  * "response" is NULL
  *
@@ -2606,7 +2609,8 @@ typedef struct {
  *  SIM_ABSENT
  *  SUBSCRIPTION_NOT_AVAILABLE
  *
- * See also: RIL_REQUEST_CDMA_GET_SUBSCRIPTION_SOURCE
+ * See also: RIL_REQUEST_CDMA_GET_SUBSCRIPTION_SOURCE,
+ *           RIL_UNSOL_CDMA_SUBSCRIPTION_SOURCE_CHANGED,
  */
 #define RIL_REQUEST_CDMA_SET_SUBSCRIPTION_SOURCE 77
 
@@ -2968,6 +2972,7 @@ typedef struct {
  * ((const char **)response)[2] is a comma separated list of H_NID (Home NID) if
  *                              CDMA subscription is available, in decimal format
  * ((const char **)response)[3] is MIN (10 digits, MIN2+MIN1) if CDMA subscription is available
+ * ((const char **)response)[4] is PRL version if CDMA subscription is available
  *
  * Valid errors:
  *  SUCCESS
@@ -3128,8 +3133,6 @@ typedef struct {
  */
 #define RIL_REQUEST_REPORT_STK_SERVICE_IS_RUNNING 103
 
-/***********************************************************************/
-
 /**
  * RIL_REQUEST_CDMA_GET_SUBSCRIPTION_SOURCE
  *
@@ -3139,8 +3142,7 @@ typedef struct {
  * "data" is NULL
  *
  * "response" is int *
- * ((int *)data)[0] is == 0 from RUIM/SIM (default)
- * ((int *)data)[0] is == 1 from NV
+ * ((int *)data)[0] is == RIL_CdmaSubscriptionSource
  *
  * Valid errors:
  *  SUCCESS
@@ -3148,26 +3150,10 @@ typedef struct {
  *  GENERIC_FAILURE
  *  SUBSCRIPTION_NOT_AVAILABLE
  *
- * See also: RIL_REQUEST_CDMA_SET_SUBSCRIPTION_SOURCE
+ * See also: RIL_REQUEST_CDMA_SET_SUBSCRIPTION_SOURCE,
+ *           RIL_UNSOL_CDMA_SUBSCRIPTION_SOURCE_CHANGED
  */
 #define RIL_REQUEST_CDMA_GET_SUBSCRIPTION_SOURCE 104
-
-/**
- * RIL_REQUEST_CDMA_PRL_VERSION
- *
- * Request the PRL (preferred roaming list) version.
- *
- * "response" is const char *
- * (const char *)response is PRL version if PRL is loaded and NULL if not
- *
- * Valid errors:
- *  SUCCESS
- *  RADIO_NOT_AVAILABLE
- *  GENERIC_FAILURE
- *
- * See also: RIL_UNSOL_CDMA_PRL_CHANGED
- */
-#define RIL_REQUEST_CDMA_PRL_VERSION 105
 
 /**
  * RIL_REQUEST_VOICE_RADIO_TECH
@@ -3184,7 +3170,7 @@ typedef struct {
  *  RADIO_NOT_AVAILABLE
  *  GENERIC_FAILURE
  */
-#define RIL_REQUEST_VOICE_RADIO_TECH 106
+#define RIL_REQUEST_VOICE_RADIO_TECH 105
 
 /**
  * RIL_REQUEST_IMS_REGISTRATION_STATE
@@ -3207,7 +3193,7 @@ typedef struct {
  *  RADIO_NOT_AVAILABLE
  *  GENERIC_FAILURE
  */
-#define RIL_REQUEST_IMS_REGISTRATION_STATE 107
+#define RIL_REQUEST_IMS_REGISTRATION_STATE 106
 
 /**
  * RIL_REQUEST_IMS_SEND_SMS
@@ -3234,7 +3220,7 @@ typedef struct {
  *
  */
 
-#define RIL_REQUEST_IMS_SEND_SMS 108
+#define RIL_REQUEST_IMS_SEND_SMS 107
 
 /**
  * RIL_REQUEST_GET_DATA_CALL_PROFILE
@@ -3257,7 +3243,7 @@ typedef struct {
  *  RIL_E_DATA_CALL_PROFILE_NOT_AVAILABLE
  *
  */
-#define RIL_REQUEST_GET_DATA_CALL_PROFILE 109
+#define RIL_REQUEST_GET_DATA_CALL_PROFILE 108
 
 /**
  * RIL_REQUEST_SET_UICC_SUBSCRIPTION_SOURCE
@@ -3275,7 +3261,7 @@ typedef struct {
  *  SUBSCRIPTION_NOT_SUPPORTED
  *
  */
-#define RIL_REQUEST_SET_UICC_SUBSCRIPTION_SOURCE  110
+#define RIL_REQUEST_SET_UICC_SUBSCRIPTION_SOURCE  109
 
 /**
  *  RIL_REQUEST_SET_DATA_SUBSCRIPTION_SOURCE
@@ -3293,7 +3279,7 @@ typedef struct {
  *  SUBSCRIPTION_NOT_AVAILABLE
  *
  */
-#define RIL_REQUEST_SET_DATA_SUBSCRIPTION_SOURCE  111
+#define RIL_REQUEST_SET_DATA_SUBSCRIPTION_SOURCE  110
 
 /**
  * RIL_REQUEST_GET_UICC_SUBSCRIPTION_SOURCE
@@ -3312,7 +3298,7 @@ typedef struct {
  *  SUBSCRIPTION_NOT_AVAILABLE
  *
  */
-#define RIL_REQUEST_GET_UICC_SUBSCRIPTION_SOURCE 112
+#define RIL_REQUEST_GET_UICC_SUBSCRIPTION_SOURCE 111
 
 /**
  * RIL_REQUEST_GET_DATA_SUBSCRIPTION_SOURCE
@@ -3333,7 +3319,7 @@ typedef struct {
  *  SUBSCRIPTION_NOT_AVAILABLE
  *
  */
-#define RIL_REQUEST_GET_DATA_SUBSCRIPTION_SOURCE 113
+#define RIL_REQUEST_GET_DATA_SUBSCRIPTION_SOURCE 112
 
 /**
  *  RIL_REQUEST_SET_SUBSCRIPTION_MODE
@@ -3354,7 +3340,7 @@ typedef struct {
  *
  */
 
-#define RIL_REQUEST_SET_SUBSCRIPTION_MODE 114
+#define RIL_REQUEST_SET_SUBSCRIPTION_MODE 113
 
 #define RIL_UNSOL_RESPONSE_BASE 1000
 
@@ -3772,11 +3758,11 @@ typedef struct {
  *
  * Called when CDMA subscription source changes.
  *
- * Callee will invoke the following request on the main thread:
+ * "data" is int *
+ * ((int *)data)[0] == RIL_CdmaSubscriptionSource
  *
- * RIL_REQUEST_CDMA_GET_SUBSCRIPTION_SOURCE
- *
- * "data" is NULL
+ * See also: RIL_REQUEST_CDMA_GET_SUBSCRIPTION_SOURCE,
+ *           RIL_REQUEST_CDMA_SET_SUBSCRIPTION_SOURCE
  */
 #define RIL_UNSOL_CDMA_SUBSCRIPTION_SOURCE_CHANGED 1031
 
@@ -3785,11 +3771,10 @@ typedef struct {
  *
  * Called when PRL (preferred roaming list) changes.
  *
- * Callee will invoke the following request on the main thread:
+ * "data" is int *
+ * ((int *)data)[0] Contains the new PRL version
  *
- * RIL_REQUEST_CDMA_PRL_VERSION
- *
- * "data" is NULL
+ * See also: RIL_REQUEST_CDMA_SUBSCRIPTION
  */
 #define RIL_UNSOL_CDMA_PRL_CHANGED 1032
 
