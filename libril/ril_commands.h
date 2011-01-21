@@ -22,7 +22,7 @@
     {RIL_REQUEST_ENTER_SIM_PUK2, dispatchSimPuk, responseInts},
     {RIL_REQUEST_CHANGE_SIM_PIN, dispatchSimPinSet, responseInts},
     {RIL_REQUEST_CHANGE_SIM_PIN2, dispatchSimPinSet, responseInts},
-    {RIL_REQUEST_ENTER_DEPERSONALIZATION_CODE, dispatchStrings, responseInts},
+    {RIL_REQUEST_ENTER_DEPERSONALIZATION_CODE, dispatchDepersonalization, responseInts},
     {RIL_REQUEST_GET_CURRENT_CALLS, dispatchVoid, responseCallList},
     {RIL_REQUEST_DIAL, dispatchDial, responseVoid},
     {RIL_REQUEST_GET_IMSI, dispatchRequestImsi, responseString},

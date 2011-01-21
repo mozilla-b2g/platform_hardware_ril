@@ -205,7 +205,7 @@ static void dispatchRequestImsi(Parcel &p, RequestInfo *pRI);
 static void dispatchSimPin(Parcel &p, RequestInfo *pRI);
 static void dispatchSimPuk(Parcel &p, RequestInfo *pRI);
 static void dispatchSimPinSet(Parcel &p, RequestInfo *pRI);
-
+static void dispatchDepersonalization(Parcel &p, RequestInfo *pRI);
 
 
 static void dispatchCdmaSms(Parcel &p, RequestInfo *pRI);
@@ -1564,6 +1564,56 @@ invalid:
     free(simPinSet.aidPtr);
     free(simPinSet.pin);
     free(simPinSet.newPin);
+    invalidCommandBlock(pRI);
+    return;
+}
+
+/**
+* Callee expects const RIL_Depersonalization *
+* Payload is:
+*   int32_t type
+*   String pin
+*/
+static void
+dispatchDepersonalization(Parcel &p, RequestInfo *pRI) {
+    RIL_Depersonalization d;
+    int32_t t;
+    status_t status;
+
+    memset (&d, 0, sizeof(d));
+
+    // note we only check status at the end
+
+    status = p.readInt32(&t);
+    d.depersonalizationType = (RIL_PersoSubstate)t;
+
+    d.depersonalizationCode = strdupReadString(p);
+
+    startRequest;
+    appendPrintBuf("%stype=%d,pin=****",
+        printBuf, d.depersonalizationType);
+    closeRequest;
+    printRequest(pRI->token, pRI->pCI->requestNumber);
+
+    if (status != NO_ERROR) {
+        goto invalid;
+    }
+
+    s_callbacks.onRequest(pRI->pCI->requestNumber, &d, sizeof(d), pRI);
+
+#ifdef MEMSET_FREED
+    memsetString(d.depersonalizationCode);
+#endif
+
+    free(d.depersonalizationCode);
+
+#ifdef MEMSET_FREED
+    memset(&d, 0, sizeof(d));
+#endif
+
+    return;
+invalid:
+    free(d.depersonalizationCode);
     invalidCommandBlock(pRI);
     return;
 }
