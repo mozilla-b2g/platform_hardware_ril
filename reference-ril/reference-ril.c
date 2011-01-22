@@ -132,8 +132,14 @@ typedef enum {
     SIM_READY = 2, /* SIM_READY means the radio state is RADIO_STATE_SIM_READY */
     SIM_PIN = 3,
     SIM_PUK = 4,
-    SIM_NETWORK_PERSONALIZATION = 5
-} SIM_Status; 
+    SIM_NETWORK_PERSONALIZATION = 5,
+    RUIM_ABSENT = 6,
+    RUIM_NOT_READY = 7,
+    RUIM_READY = 8,
+    RUIM_PIN = 9,
+    RUIM_PUK = 10,
+    RUIM_NETWORK_PERSONALIZATION = 11
+} SIM_Status;
 
 static void onRequest (int request, void *data, size_t datalen, RIL_Token t);
 static RIL_RadioState currentState();
@@ -2500,7 +2506,25 @@ static int getCardList(RIL_CardList **pp_card_list) {
           NULL, NULL, 0, RIL_PINSTATE_ENABLED_BLOCKED, RIL_PINSTATE_UNKNOWN },
         // SIM_NETWORK_PERSONALIZATION = 5
         { RIL_APPTYPE_SIM, RIL_APPSTATE_SUBSCRIPTION_PERSO, RIL_PERSOSUBSTATE_SIM_NETWORK,
-          NULL, NULL, 0, RIL_PINSTATE_ENABLED_NOT_VERIFIED, RIL_PINSTATE_UNKNOWN }
+          NULL, NULL, 0, RIL_PINSTATE_ENABLED_NOT_VERIFIED, RIL_PINSTATE_UNKNOWN },
+        // RUIM_ABSENT = 6
+        { RIL_APPTYPE_UNKNOWN, RIL_APPSTATE_UNKNOWN, RIL_PERSOSUBSTATE_UNKNOWN,
+          NULL, NULL, 0, RIL_PINSTATE_UNKNOWN, RIL_PINSTATE_UNKNOWN },
+        // RUIM_NOT_READY = 7
+        { RIL_APPTYPE_RUIM, RIL_APPSTATE_DETECTED, RIL_PERSOSUBSTATE_UNKNOWN,
+          NULL, NULL, 0, RIL_PINSTATE_UNKNOWN, RIL_PINSTATE_UNKNOWN },
+        // RUIM_READY = 8
+        { RIL_APPTYPE_RUIM, RIL_APPSTATE_READY, RIL_PERSOSUBSTATE_READY,
+          NULL, NULL, 0, RIL_PINSTATE_UNKNOWN, RIL_PINSTATE_UNKNOWN },
+        // RUIM_PIN = 9
+        { RIL_APPTYPE_RUIM, RIL_APPSTATE_PIN, RIL_PERSOSUBSTATE_UNKNOWN,
+          NULL, NULL, 0, RIL_PINSTATE_ENABLED_NOT_VERIFIED, RIL_PINSTATE_UNKNOWN },
+        // RUIM_PUK = 10
+        { RIL_APPTYPE_RUIM, RIL_APPSTATE_PUK, RIL_PERSOSUBSTATE_UNKNOWN,
+          NULL, NULL, 0, RIL_PINSTATE_ENABLED_BLOCKED, RIL_PINSTATE_UNKNOWN },
+        // RUIM_NETWORK_PERSONALIZATION = 11
+        { RIL_APPTYPE_RUIM, RIL_APPSTATE_SUBSCRIPTION_PERSO, RIL_PERSOSUBSTATE_SIM_NETWORK,
+           NULL, NULL, 0, RIL_PINSTATE_ENABLED_NOT_VERIFIED, RIL_PINSTATE_UNKNOWN }
     };
     RIL_CardState card_state;
     int num_apps;
@@ -2511,7 +2535,7 @@ static int getCardList(RIL_CardList **pp_card_list) {
         num_apps = 0;
     } else {
         card_state = RIL_CARDSTATE_PRESENT;
-        num_apps = 1;
+        num_apps = 2;
     }
 
     RIL_CardList *p_card_list = malloc(sizeof(RIL_CardList));
@@ -2537,14 +2561,16 @@ static int getCardList(RIL_CardList **pp_card_list) {
     // that reflects sim_status for gsm.
     if (num_apps != 0) {
         // Only support one app, gsm
-        p_card_status->num_applications = 1;
+        p_card_status->num_applications = 2;
         p_card_status->num_current_3gpp_indexes = 1;
         p_card_status->subscription_3gpp_app_index[0] = 0;
         // TODO: Properly handle 3gpp2 apps
-        p_card_status->num_current_3gpp2_indexes = 0;
+        p_card_status->num_current_3gpp2_indexes = 1;
+        p_card_status->subscription_3gpp2_app_index[0] = 1;
 
         // Get the correct app status
         p_card_status->applications[0] = app_status_array[sim_status];
+        p_card_status->applications[1] = app_status_array[sim_status + RUIM_ABSENT];
     }
 
     *pp_card_list = p_card_list;
