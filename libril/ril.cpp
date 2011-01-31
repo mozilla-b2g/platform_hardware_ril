@@ -1,6 +1,7 @@
 /* //device/libs/telephony/ril.cpp
 **
 ** Copyright 2006, The Android Open Source Project
+** Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
 ** you may not use this file except in compliance with the License.
@@ -216,6 +217,9 @@ static void dispatchCdmaSmsAck(Parcel &p, RequestInfo *pRI);
 static void dispatchGsmBrSmsCnf(Parcel &p, RequestInfo *pRI);
 static void dispatchCdmaBrSmsCnf(Parcel &p, RequestInfo *pRI);
 static void dispatchRilCdmaSmsWriteArgs(Parcel &p, RequestInfo *pRI);
+
+static void dispatchUiccSubscripton(Parcel &p, RequestInfo *pRI);
+
 static int responseInts(Parcel &p, void *response, size_t responselen);
 static int responseStrings(Parcel &p, void *response, size_t responselen);
 static int responseString(Parcel &p, void *response, size_t responselen);
@@ -1597,6 +1601,46 @@ invalid:
     return;
 }
 
+static void dispatchUiccSubscripton(Parcel &p, RequestInfo *pRI) {
+    RIL_SelectUiccSub uicc_sub;
+    status_t status;
+    int32_t  t;
+    memset(&uicc_sub, 0, sizeof(uicc_sub));
+
+    status = p.readInt32(&t);
+    uicc_sub.slot = (int) t;
+
+    status = p.readInt32(&t);
+    uicc_sub.app_index = (int) t;
+
+    status = p.readInt32(&t);
+    uicc_sub.sub_num = (RIL_Subscription) t;
+
+    status = p.readInt32(&t);
+    uicc_sub.act_status = (RIL_UiccSubActStatus) t;
+
+    if (status != NO_ERROR) {
+        goto invalid;
+    }
+
+    startRequest;
+
+    appendPrintBuf("slot=%d, app_index=%d, act_status = %d", uicc_sub.slot, uicc_sub.app_index, uicc_sub.act_status);
+    LOGD("dispatchUiccSubscription, slot=%d, app_index=%d, act_status = %d", uicc_sub.slot, uicc_sub.app_index, uicc_sub.act_status);
+    closeRequest;
+    printRequest(pRI->token, pRI->pCI->requestNumber);
+
+    s_callbacks.onRequest(pRI->pCI->requestNumber, &uicc_sub, sizeof(uicc_sub), pRI);
+
+#ifdef MEMSET_FREED
+    memset(&uicc_sub, 0, sizeof(uicc_sub));
+#endif
+    return;
+
+invalid:
+    invalidCommandBlock(pRI);
+    return;
+}
 
 static int
 blockingWrite(int fd, const void *buffer, size_t len) {
@@ -2398,6 +2442,22 @@ static int responseCdmaCallWaiting(Parcel &p, void *response,
 
     closeResponse;
 
+    return 0;
+}
+
+static int responseUiccSubscription(Parcel &p,
+        void *response,size_t responselen) {
+
+    LOGD("In responseUiccSubscription");
+    startResponse;
+
+    RIL_SelectUiccSub *p_cur = (RIL_SelectUiccSub *)response;
+    p.writeInt32(p_cur->slot);
+    p.writeInt32(p_cur->app_index);
+    p.writeInt32(p_cur->sub_num);
+    p.writeInt32(p_cur->act_status);
+
+    closeResponse;
     return 0;
 }
 
@@ -3575,6 +3635,11 @@ requestToString(int request) {
         case RIL_REQUEST_IMS_REGISTRATION_STATE: return "IMS_REGISTRATION_STATE";
         case RIL_REQUEST_IMS_SEND_SMS: return "IMS_SEND_SMS";
         case RIL_REQUEST_GET_DATA_CALL_PROFILE: return "GET_DATA_CALL_PROFILE";
+        case RIL_REQUEST_SET_UICC_SUBSCRIPTION_SOURCE: return "SET_UICC_SUBSCRIPTION_SOURCE";
+        case RIL_REQUEST_SET_DATA_SUBSCRIPTION_SOURCE: return "SET_DATA_SUBSCRIPTION_SOURCE";
+        case RIL_REQUEST_GET_UICC_SUBSCRIPTION_SOURCE: return "GET_UICC_SUBSCRIPTION_SOURCE";
+        case RIL_REQUEST_GET_DATA_SUBSCRIPTION_SOURCE: return "GET_DATA_SUBSCRIPTION_SOURCE";
+        case RIL_REQUEST_SET_SUBSCRIPTION_MODE: return "SET_SUBSCRIPTION_MODE";
         case RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED: return "UNSOL_RESPONSE_RADIO_STATE_CHANGED";
         case RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED: return "UNSOL_RESPONSE_CALL_STATE_CHANGED";
         case RIL_UNSOL_RESPONSE_NETWORK_STATE_CHANGED: return "UNSOL_RESPONSE_NETWORK_STATE_CHANGED";
@@ -3612,6 +3677,7 @@ requestToString(int request) {
         case RIL_UNSOL_SUPP_SVC_NOTIFICATION: return "UNSOL_SUPP_SVC_NOTIFICATION";
         case RIL_UNSOL_RESPONSE_IMS_NETWORK_STATE_CHANGED: return "RESPONSE_IMS_NETWORK_STATE_CHANGED";
         case RIL_UNSOL_RESPONSE_TETHERED_MODE_STATE_CHANGED: return "RIL_UNSOL_RESPONSE_TETHERED_MODE_STATE_CHANGED";
+        case RIL_UNSOL_SUBSCRIPTION_READY: return "UNSOL_SUBSCRIPTION_READY";
         default: return "<unknown request>";
     }
 }
