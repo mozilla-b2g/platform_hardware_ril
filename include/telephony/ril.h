@@ -65,13 +65,14 @@ typedef enum {
     RIL_E_SIM_ABSENT = 11,                      /* fail to set the location where CDMA subscription
                                                    shall be retrieved because of SIM or RUIM
                                                    card absent */
-    RIL_E_SUBSCRIPTION_NOT_AVAILABLE = 12,      /* fail to find CDMA subscription from specified
+    RIL_E_SUBSCRIPTION_NOT_AVAILABLE = 12,      /* fail to find subscription from specified
                                                    location */
     RIL_E_MODE_NOT_SUPPORTED = 13,              /* HW does not support preferred network type */
     RIL_E_FDN_CHECK_FAILURE = 14,               /* command failed because recipient is not on FDN list */
     RIL_E_ILLEGAL_SIM_OR_ME = 15,               /* network selection failed due to
                                                    illegal SIM or ME */
-    RIL_E_SETUP_DATA_CALL_FAILURE = 16          /* data call setup failed with a reason */
+    RIL_E_SETUP_DATA_CALL_FAILURE = 16,          /* data call setup failed with a reason */
+    RIL_E_SUBSCRIPTION_NOT_SUPPORTED = 17       /* Subscription not supported by RIL */
 } RIL_Errno;
 
 typedef enum {
@@ -406,7 +407,9 @@ typedef struct {
 typedef enum {
     RIL_CARDSTATE_ABSENT   = 0,
     RIL_CARDSTATE_PRESENT  = 1,
-    RIL_CARDSTATE_ERROR    = 2
+    RIL_CARDSTATE_ERROR    = 2,
+    RIL_CARDSTATE_NOT_INITIALIZED = 3 /* Card is being initialized, Telephony layer should wait till
+                                         the state becomes ABSENT/ERROR/PRESENT */
 } RIL_CardState;
 
 typedef enum {
@@ -766,7 +769,6 @@ typedef struct {
   RIL_Subscription sub_num;     /* Indicates subscription 0 or subscription 1 */
   RIL_UiccSubActStatus  act_status;
 } RIL_SelectUiccSub;
-
 
 /**
  * RIL_REQUEST_GET_SIM_STATUS
@@ -4015,9 +4017,11 @@ void RIL_onRequestComplete(RIL_Token t, RIL_Errno e,
  * @param datalen the length of data in byte
  */
 
-void RIL_onUnsolicitedResponse(int unsolResponse, const void *data,
+void RIL_onUnsolicitedResponse_Inst0(int unsolResponse, const void *data,
                                 size_t datalen);
 
+void RIL_onUnsolicitedResponse_Inst1(int unsolResponse, const void *data,
+                                size_t datalen);
 
 /**
  * Call user-specifed "callback" function on on the same thread that
