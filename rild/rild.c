@@ -62,6 +62,7 @@ extern void RIL_requestTimedCallback (RIL_TimedCallback callback,
 
 
 static int isMultiSimEnabled();
+static int isMultiRild();
 
 static struct RIL_Env s_rilEnv_inst0 = {
     RIL_onRequestComplete,
@@ -113,25 +114,42 @@ int main(int argc, char **argv)
 {
     const char * rilLibPath = NULL;
     char **rilArgv;
+    static char * s_argv[MAX_LIB_ARGS];
     void *dlHandle;
     const RIL_RadioFunctions *(*rilInit)(const struct RIL_Env *, int, char **);
     const RIL_RadioFunctions *funcs_inst[NUM_CLIENTS];
     char libPath[PROPERTY_VALUE_MAX];
     unsigned char hasLibArgs = 0;
-
+    int j = 0;
     int i;
+    static char client[3] = {'0'};
     LOGE("**RIL Daemon Started**");
-    for (i = 1; i < argc ;) {
+    LOGE("**RILd param count=%d**", argc);
+    memset(s_argv, 0, MAX_LIB_ARGS*sizeof(char));
+
+    s_argv[0] = argv[0];
+
+    for (i = 1, j = 1; i < argc ;) {
         if (0 == strcmp(argv[i], "-l") && (argc - i > 1)) {
             rilLibPath = argv[i + 1];
+            i += 2;
+        } else if (0 == strcmp(argv[i], "-c") && (argc - i > 1)) {
+            strcpy(client, argv[i+1]);
             i += 2;
         } else if (0 == strcmp(argv[i], "--")) {
             i++;
             hasLibArgs = 1;
+            memcpy(&s_argv[j], &argv[i], argc-i);
             break;
         } else {
             usage(argv[0]);
         }
+    }
+
+    if (strcmp(client, "0") == 0) {
+        RIL_setRilSocketName("rild");
+    } else if (strcmp(client, "1") == 0) {
+        RIL_setRilSocketName("rild1");
     }
 
     if (rilLibPath == NULL) {
@@ -147,7 +165,6 @@ int main(int argc, char **argv)
     /* special override when in the emulator */
 #if 1
     {
-        static char*  arg_overrides[3];
         static char   arg_device[32];
         int           done = 0;
 
@@ -197,8 +214,9 @@ int main(int argc, char **argv)
                     snprintf( arg_device, sizeof(arg_device), "%s/%s",
                                 ANDROID_SOCKET_DIR, QEMUD_SOCKET_NAME );
 
-                    arg_overrides[1] = "-s";
-                    arg_overrides[2] = arg_device;
+                    memset(s_argv, 0, sizeof(s_argv));
+                    s_argv[1] = "-s";
+                    s_argv[2] = arg_device;
                     done = 1;
                     break;
                 }
@@ -231,20 +249,19 @@ int main(int argc, char **argv)
 
             snprintf( arg_device, sizeof(arg_device), DEV_PREFIX "%s", p );
             arg_device[sizeof(arg_device)-1] = 0;
-            arg_overrides[1] = "-d";
-            arg_overrides[2] = arg_device;
+            memset(s_argv, 0, sizeof(s_argv));
+            s_argv[1] = "-d";
+            s_argv[2] = arg_device;
             done = 1;
 
         } while (0);
 
         if (done) {
-            argv = arg_overrides;
             argc = 3;
-            i    = 1;
+            i = 1;
             hasLibArgs = 1;
             rilLibPath = REFERENCE_RIL_PATH;
-
-            LOGD("overriding with %s %s", arg_overrides[1], arg_overrides[2]);
+            LOGD("overriding with %s %s", s_argv[1], s_argv[2]);
         }
     }
 OpenLib:
@@ -269,31 +286,29 @@ OpenLib:
     }
 
     if (hasLibArgs) {
-        rilArgv = argv + i - 1;
-        argc = argc -i + 1;
+        argc = argc-i+1;
     } else {
         static char * newArgv[MAX_LIB_ARGS];
         static char args[PROPERTY_VALUE_MAX];
-        rilArgv = newArgv;
         property_get(LIB_ARGS_PROPERTY, args, "");
-        argc = make_argv(args, rilArgv);
+        argc = make_argv(args, s_argv);
     }
 
     // Make sure there's a reasonable argv[0]
-    rilArgv[0] = argv[0];
+    s_argv[0] = argv[0];
 
-    if (isMultiSimEnabled()) {
-        argc++;
-        rilArgv[3] = "0";
-        funcs_inst[0] = rilInit(&s_rilEnv_inst0, argc, rilArgv);
-        RIL_register(funcs_inst[0], 0);
-        rilArgv[3] = "1";
-        funcs_inst[1] = rilInit(&s_rilEnv_inst1, argc, rilArgv);
+    s_argv[argc++] = "-c";
+    s_argv[argc++] = client;
+
+    LOGE("RIL_Init argc = %d client = %s",argc, s_argv[argc-1]);
+    funcs_inst[0] = rilInit(&s_rilEnv_inst0, argc, s_argv);
+    RIL_register(funcs_inst[0], 0);
+
+    if (isMultiSimEnabled() && !isMultiRild()) {
+        s_argv[argc-1] = "1";  //client id incase of single rild managing two instances of RIL
+        LOGE("RIL_Init argc = %d client = %s",argc, s_argv[argc-1]);
+        funcs_inst[1] = rilInit(&s_rilEnv_inst1, argc, s_argv);
         RIL_register(funcs_inst[1], 1);
-    }
-    else {
-        funcs_inst[0] = rilInit(&s_rilEnv_inst0, argc, rilArgv);
-        RIL_register(funcs_inst[0], 0);
     }
 
 done:
@@ -318,3 +333,16 @@ static int isMultiSimEnabled()
     return enabled;
 }
 
+static int isMultiRild()
+{
+    int enabled = 0;
+    char prop_val[PROPERTY_VALUE_MAX];
+    if (property_get("ro.multi.rild", prop_val, "0") > 0)
+    {
+        if (strncmp(prop_val, "true", 4) == 0) {
+            enabled = 1;
+        }
+        LOGD("isMultiRild: prop_val = %s enabled = %d", prop_val, enabled);
+    }
+    return enabled;
+}

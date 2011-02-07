@@ -56,9 +56,6 @@ namespace android {
 
 #define PHONE_PROCESS "radio"
 
-#define SOCKET_NAME_RIL "rild"
-#define SOCKET_NAME_RIL_DEBUG "rild-debug"
-
 #define ANDROID_WAKE_LOCK_NAME "radio-interface"
 
 
@@ -201,6 +198,8 @@ static UserCallbackInfo *s_last_wake_timeout_info = NULL;
 static void *s_lastNITZTimeData = NULL;
 static size_t s_lastNITZTimeDataSize;
 
+static char rild[6] = {0};
+
 #if RILC_LOG
     static char printBuf[PRINTBUF_SIZE];
 #endif
@@ -290,6 +289,14 @@ static UnsolResponseInfo s_unsolResponses[] = {
 #include "ril_unsol_commands.h"
 };
 
+static char * RIL_getRilSocketName() {
+    return rild;
+}
+
+extern "C"
+void RIL_setRilSocketName(char * s) {
+    strcpy(rild, s);
+}
 
 void printfds() {
     for(int i = 0; i < MAX_NUM_CLIENTS; i++) {
@@ -3297,13 +3304,14 @@ RIL_register (const RIL_RadioFunctions *callbacks, int client_id) {
    LOGE("s_registerCalled=%d, s_started=%d ",s_registerCalled, s_started);
    if(s_registerCalled >  1) //already done for client 0
       return ;
-    s_fdListen = android_get_control_socket(SOCKET_NAME_RIL);
+    s_fdListen = android_get_control_socket(RIL_getRilSocketName());
     if (s_fdListen < 0) {
-        LOGE("Failed to get socket '" SOCKET_NAME_RIL "'");
+        LOGE("Failed to get socket %s", RIL_getRilSocketName());
         exit(-1);
     }
 
     ret = listen(s_fdListen, 4);
+    LOGD(" Ril register s_fdListen=%d",s_fdListen);
 
     if (ret < 0) {
         LOGE("Failed to listen on control socket '%d': %s",
@@ -3322,9 +3330,16 @@ RIL_register (const RIL_RadioFunctions *callbacks, int client_id) {
 #if 1
     // start debug interface socket
 
-    s_fdDebug = android_get_control_socket(SOCKET_NAME_RIL_DEBUG);
+    char rildebug[12] = {0};
+    if (strcmp(RIL_getRilSocketName(), "rild") == 0) {
+        strcpy(rildebug, "rild-debug");
+    } else {
+        strcpy(rildebug, "rild-debug1");
+    }
+
+    s_fdDebug = android_get_control_socket(rildebug);
     if (s_fdDebug < 0) {
-        LOGE("Failed to get socket '" SOCKET_NAME_RIL_DEBUG "' errno:%d", errno);
+        LOGE("Failed to get socket %s errno:%d", rildebug, errno);
         exit(-1);
     }
 
