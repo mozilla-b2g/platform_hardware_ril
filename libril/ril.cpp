@@ -2794,12 +2794,11 @@ static int responseGetDataCallProfile(Parcel &p, void *response, size_t response
 
     startResponse;
     for (int i = 0 ; i < num ; i++) {
-        p_cur += i;
-
         p.writeInt32(p_cur->profileId);
         p.writeInt32(p_cur->priority);
         appendPrintBuf("[profileId=%d,priority=%d],", printBuf,
             p_cur->profileId, p_cur->priority);
+        p_cur++;
     }
     removeLastChar;
     closeResponse;
