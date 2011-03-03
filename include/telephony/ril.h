@@ -1086,6 +1086,9 @@ typedef struct {
  *
  * Hang up a specific line (like AT+CHLD=1x)
  *
+ * After this HANGUP request returns, RIL should show the connection is NOT
+ * active anymore in next RIL_REQUEST_GET_CURRENT_CALLS query.
+ *
  * "data" is an int *
  * (int *)data)[0] contains Connection index (value of 'x' in CHLD above)
  *
@@ -1104,6 +1107,9 @@ typedef struct {
  *
  * Hang up waiting or held (like AT+CHLD=0)
  *
+ * After this HANGUP request returns, RIL should show the connection is NOT
+ * active anymore in next RIL_REQUEST_GET_CURRENT_CALLS query.
+ *
  * "data" is NULL
  * "response" is NULL
  *
@@ -1119,6 +1125,9 @@ typedef struct {
  * RIL_REQUEST_HANGUP_FOREGROUND_RESUME_BACKGROUND
  *
  * Hang up waiting or held (like AT+CHLD=1)
+ *
+ * After this HANGUP request returns, RIL should show the connection is NOT
+ * active anymore in next RIL_REQUEST_GET_CURRENT_CALLS query.
  *
  * "data" is NULL
  * "response" is NULL
