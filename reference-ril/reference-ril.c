@@ -148,8 +148,8 @@ static void onCancel (RIL_Token t);
 static const char *getVersion();
 static int isRadioOn();
 static SIM_Status getSIMStatus();
-static int getCardStatus(RIL_CardStatus **pp_card_status);
-static void freeCardStatus(RIL_CardStatus *p_card_status);
+static int getCardStatus(RIL_CardStatus_v6 **pp_card_status);
+static void freeCardStatus(RIL_CardStatus_v6 *p_card_status);
 static void onDataCallListChanged(void *param);
 
 extern const char * requestToString(int request);
@@ -1651,12 +1651,12 @@ static void  requestSIM_IO(void *data, size_t datalen, RIL_Token t)
     RIL_SIM_IO_Response sr;
     int err;
     char *cmd = NULL;
-    RIL_SIM_IO *p_args;
+    RIL_SIM_IO_v6 *p_args;
     char *line;
 
     memset(&sr, 0, sizeof(sr));
 
-    p_args = (RIL_SIM_IO *)data;
+    p_args = (RIL_SIM_IO_v6 *)data;
 
     /* FIXME handle pin2 */
     /* FIXME handle aidPtr */
@@ -1710,12 +1710,14 @@ static void  requestEnterSimPin(void*  data, size_t  datalen, RIL_Token  t)
     ATResponse   *p_response = NULL;
     int           err;
     char*         cmd = NULL;
-    RIL_SimPin*   sp = (RIL_SimPin *)data;
+    const char**  strings = (const char**)data;;
 
-    if (datalen < sizeof(RIL_SimPin)) {
+    if ( datalen == sizeof(char*) ) {
+        asprintf(&cmd, "AT+CPIN=%s", strings[0]);
+    } else if ( datalen == 2*sizeof(char*) || datalen == 3 * sizeof(char*)) {
+        asprintf(&cmd, "AT+CPIN=%s,%s", strings[0], strings[1]);
+    } else
         goto error;
-    }
-    asprintf(&cmd, "AT+CPIN=%s", sp->pin);
 
     err = at_send_command_singleline(cmd, "+CPIN:", &p_response);
     free(cmd);
@@ -1729,53 +1731,6 @@ error:
     at_response_free(p_response);
 }
 
-static void  requestEnterSimPuk(void*  data, size_t  datalen, RIL_Token  t)
-{
-    ATResponse   *p_response = NULL;
-    int           err;
-    char*         cmd = NULL;
-    RIL_SimPuk*   sp = (RIL_SimPuk *)data;
-
-    if (datalen < sizeof(RIL_SimPuk)) {
-        goto error;
-    }
-    asprintf(&cmd, "AT+CPIN=%s,%s", sp->puk,sp->newPin);
-
-    err = at_send_command_singleline(cmd, "+CPIN:", &p_response);
-    free(cmd);
-
-    if (err < 0 || p_response->success == 0) {
-error:
-        RIL_onRequestComplete(t, RIL_E_PASSWORD_INCORRECT, NULL, 0);
-    } else {
-        RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
-    }
-    at_response_free(p_response);
-}
-
-static void  requestSimPinSet(void*  data, size_t  datalen, RIL_Token  t)
-{
-    ATResponse   *p_response = NULL;
-    int           err;
-    char*         cmd = NULL;
-    RIL_SimPinSet*   sps = (RIL_SimPinSet *)data;
-
-    if (datalen < sizeof(RIL_SimPinSet)) {
-        goto error;
-    }
-    asprintf(&cmd, "AT+CPIN=%s,%s", sps->pin, sps->newPin);
-
-    err = at_send_command_singleline(cmd, "+CPIN:", &p_response);
-    free(cmd);
-
-    if (err < 0 || p_response->success == 0) {
-error:
-        RIL_onRequestComplete(t, RIL_E_PASSWORD_INCORRECT, NULL, 0);
-    } else {
-        RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
-    }
-    at_response_free(p_response);
-}
 
 static void  requestSendUSSD(void *data, size_t datalen, RIL_Token t)
 {
@@ -1892,7 +1847,7 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
 
     switch (request) {
         case RIL_REQUEST_GET_SIM_STATUS: {
-            RIL_CardStatus *p_card_status;
+            RIL_CardStatus_v6 *p_card_status;
             char *p_buffer;
             int buffer_size;
 
@@ -2140,18 +2095,12 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
         }
 
         case RIL_REQUEST_ENTER_SIM_PIN:
-        case RIL_REQUEST_ENTER_SIM_PIN2:
-            requestEnterSimPin(data, datalen, t);
-            break;
-
         case RIL_REQUEST_ENTER_SIM_PUK:
+        case RIL_REQUEST_ENTER_SIM_PIN2:
         case RIL_REQUEST_ENTER_SIM_PUK2:
-            requestEnterSimPuk(data, datalen, t);
-            break;
-
         case RIL_REQUEST_CHANGE_SIM_PIN:
         case RIL_REQUEST_CHANGE_SIM_PIN2:
-            requestSimPinSet(data, datalen, t);
+            requestEnterSimPin(data, datalen, t);
             break;
 
         case RIL_REQUEST_VOICE_RADIO_TECH:
@@ -2478,7 +2427,7 @@ done:
  * This must be freed using freeCardStatus.
  * @return: On success returns RIL_E_SUCCESS
  */
-static int getCardStatus(RIL_CardStatus **pp_card_status) {
+static int getCardStatus(RIL_CardStatus_v6 **pp_card_status) {
     static RIL_AppStatus app_status_array[] = {
         // SIM_ABSENT = 0
         { RIL_APPTYPE_UNKNOWN, RIL_APPSTATE_UNKNOWN, RIL_PERSOSUBSTATE_UNKNOWN,
@@ -2530,13 +2479,12 @@ static int getCardStatus(RIL_CardStatus **pp_card_status) {
     }
 
     // Allocate and initialize base card status.
-    RIL_CardStatus *p_card_status = malloc(sizeof(RIL_CardStatus));
+    RIL_CardStatus_v6 *p_card_status = malloc(sizeof(RIL_CardStatus_v6));
     p_card_status->card_state = card_state;
     p_card_status->universal_pin_state = RIL_PINSTATE_UNKNOWN;
-    p_card_status->num_current_3gpp_indexes = 0;
-    p_card_status->subscription_3gpp_app_index[0] = RIL_CARD_MAX_APPS;
-    p_card_status->num_current_3gpp2_indexes= 0;
-    p_card_status->subscription_3gpp2_app_index[0] = RIL_CARD_MAX_APPS;
+    p_card_status->gsm_umts_subscription_app_index = RIL_CARD_MAX_APPS;
+    p_card_status->cdma_subscription_app_index = RIL_CARD_MAX_APPS;
+    p_card_status->ims_subscription_app_index = RIL_CARD_MAX_APPS;
     p_card_status->num_applications = num_apps;
 
     // Initialize application status
@@ -2548,13 +2496,9 @@ static int getCardStatus(RIL_CardStatus **pp_card_status) {
     // Pickup the appropriate application status
     // that reflects sim_status for gsm.
     if (num_apps != 0) {
-        // Only support one app, gsm
         p_card_status->num_applications = 2;
-        p_card_status->num_current_3gpp_indexes = 1;
-        p_card_status->subscription_3gpp_app_index[0] = 0;
-        // TODO: Properly handle 3gpp2 apps
-        p_card_status->num_current_3gpp2_indexes = 1;
-        p_card_status->subscription_3gpp2_app_index[0] = 1;
+        p_card_status->gsm_umts_subscription_app_index = 0;
+        p_card_status->cdma_subscription_app_index = 1;
 
         // Get the correct app status
         p_card_status->applications[0] = app_status_array[sim_status];
@@ -2568,7 +2512,7 @@ static int getCardStatus(RIL_CardStatus **pp_card_status) {
 /**
  * Free the card status returned by getCardStatus
  */
-static void freeCardStatus(RIL_CardStatus *p_card_status) {
+static void freeCardStatus(RIL_CardStatus_v6 *p_card_status) {
     free(p_card_status);
 }
 
