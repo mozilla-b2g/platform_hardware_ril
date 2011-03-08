@@ -1773,6 +1773,124 @@ static void requestExitEmergencyMode(void *data, size_t datalen, RIL_Token t)
     RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
 }
 
+static void  requestSetupQos(void*  data, size_t  datalen, RIL_Token  t)
+{
+    const char* in_callId = ((const char **)data)[0];
+    const char* in_qosSpec = ((const char **)data)[1];
+
+    const int RESPONSE1_PARAM_NUM = 2;
+
+    char* p_buffer1[RESPONSE1_PARAM_NUM];
+    int buffer_size1 = RESPONSE1_PARAM_NUM*sizeof(char*);
+    const char* out_code = "0";
+    const char* out_qosId = "1";
+
+
+    p_buffer1[0] = out_code;
+    p_buffer1[1] = out_qosId;
+    LOGE("requestSetupQos:RIL_onRequestComplete");
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, p_buffer1, buffer_size1);
+
+
+const int RESPONSE2_PARAM_NUM = 2;
+    char* p_buffer2[RESPONSE2_PARAM_NUM];
+    int buffer_size2 = RESPONSE2_PARAM_NUM*sizeof(char*);
+
+    p_buffer2[0] = "1";
+    p_buffer2[1] = "1";
+    LOGE("requestSetupQos:RIL_onUnsolicitedResponse");
+    RIL_onUnsolicitedResponse ( RIL_UNSOL_QOS_STATE_CHANGED_IND,
+                p_buffer2, buffer_size2);
+}
+
+static void  requestReleaseQos(void*  data, size_t  datalen, RIL_Token  t)
+{
+
+    const char* in_qosId = ((const char **)data)[0];
+    const int RESPONSE1_PARAM_NUM =1;
+    char* p_buffer1[RESPONSE1_PARAM_NUM];
+    int buffer_size1 = RESPONSE1_PARAM_NUM*sizeof(char*);
+    const char* out_code = "1";
+    p_buffer1[0] = out_code;
+
+
+    LOGE("requestReleaseQos:RIL_onRequestComplete");
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, p_buffer1, buffer_size1);
+
+    const int RESPONSE2_PARAM_NUM = 2;
+    char* p_buffer2[RESPONSE2_PARAM_NUM];
+    int buffer_size2 = RESPONSE2_PARAM_NUM*sizeof(char*);
+
+    p_buffer2[0] = "0";
+    p_buffer2[1] = "0";
+    LOGE("requestRelease:RIL_onUnsolicitedResponse");
+    RIL_onUnsolicitedResponse ( RIL_UNSOL_QOS_STATE_CHANGED_IND,
+                p_buffer2, buffer_size2);
+
+
+
+}
+static void  requestModifyQos(void*  data, size_t  datalen, RIL_Token  t)
+{
+    const char* in_qosId = ((const char *)data)[0];
+    const char* in_qosSpec = ((const char *)data)[1];
+
+    const int RESPONSE1_PARAM_NUM = 1;
+    char* p_buffer1[RESPONSE1_PARAM_NUM];
+    int buffer_size1 = RESPONSE1_PARAM_NUM*sizeof(char*);
+    const char* out_code = "1";
+    p_buffer1[0] = out_code;
+
+    LOGE("requestModifyQos:RIL_onRequestComplete");
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, p_buffer1, buffer_size1);
+
+
+
+    const int RESPONSE2_PARAM_NUM = 2;
+    char* p_buffer2[RESPONSE2_PARAM_NUM];
+    int buffer_size2 = RESPONSE2_PARAM_NUM*sizeof(char*);
+
+    p_buffer2[0] = "1";
+    p_buffer2[1] = "RIL_QOS_SUCCESS";
+    LOGE("requestModify:RIL_onUnsolicitedResponse");
+    RIL_onUnsolicitedResponse ( RIL_UNSOL_QOS_STATE_CHANGED_IND,
+                p_buffer2, buffer_size2);
+
+}
+static void  requestSuspendQos(void*  data, size_t  datalen, RIL_Token  t)
+{
+    const char* in_qosId = ((const char *)data)[0];
+
+    LOGE("requestSuspendQos:RIL_onRequestComplete");
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+}
+static void  requestResumeQos(void*  data, size_t  datalen, RIL_Token  t)
+{
+    const char* in_qosId = ((const char *)data)[0];
+
+    LOGE("requestResumeQos:RIL_onRequestComplete");
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+}
+static void  requestGetQosStatus(void*  data, size_t  datalen, RIL_Token  t)
+{
+
+    const char* in_qosId = ((const char *)data)[0];
+    const int RESPONSE_PARAM_NUM = 3;
+    char* p_buffer[RESPONSE_PARAM_NUM];
+    int buffer_size = RESPONSE_PARAM_NUM*sizeof(char*);
+    const char* out_code = "0";
+    const char* out_status = "1";
+    const char* out_qosSpec = "RIL_QOS_SPEC_INDEX=0,RIL_QOS_FLOW_DIRECTION=0,RIL_QOS_FLOW_DATA_RATE_MIN=64000,RIL_QOS_FLOW_DATA_RATE_MAX=128000,RIL_QOS_FLOW_LATENCY=50,RIL_QOS_FILTER_DIRECTION=0,RIL_QOS_FILTER_IPV4_DESTINATION_ADDR=10.2.5.111,RIL_QOS_FILTER_UDP_DESTINATION_PORT_START=4040,RIL_QOS_FILTER_UDP_DESTINATION_PORT_RANGE=20";
+
+    p_buffer[0] = out_code;
+    p_buffer[1] = out_status;
+    p_buffer[2] = out_qosSpec;
+
+
+    LOGE("requestGetQosStatus:RIL_onRequestComplete");
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, p_buffer, buffer_size);
+}
+
 static int techFamilyFromModemType(int mdmtype)
 {
     int ret = -1;
@@ -2131,6 +2249,30 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
 
         case RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE:
             requestGetPreferredNetworkType(request, data, datalen, t);
+            break;
+
+       case RIL_REQUEST_SETUP_QOS:
+            requestSetupQos(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_RELEASE_QOS:
+            requestReleaseQos(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_MODIFY_QOS:
+            requestModifyQos(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_SUSPEND_QOS:
+            requestSuspendQos(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_RESUME_QOS:
+            requestResumeQos(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_GET_QOS_STATUS:
+            requestGetQosStatus(data, datalen, t);
             break;
 
         case RIL_REQUEST_BASEBAND_VERSION:
