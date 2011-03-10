@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright (C) 2006,2011 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -814,20 +814,20 @@ typedef struct {
 } RIL_DataCallProfileInfo;
 
 typedef enum {
-  RIL_UICC_SUBSCRIPTION_ACTIVATE = 0,
-  RIL_UICC_SUBSCRIPTION_DEACTIVATE = 1
+  RIL_UICC_SUBSCRIPTION_DEACTIVATE = 0,
+  RIL_UICC_SUBSCRIPTION_ACTIVATE = 1,
 } RIL_UiccSubActStatus;
 
 typedef enum {
-  RIL_SUBSCRIPTION_0 = 0,
-  RIL_SUBSCRIPTION_1 = 1
-} RIL_Subscription;
+  RIL_SUBSCRIPTION_1 = 0,
+  RIL_SUBSCRIPTION_2 = 1
+} RIL_SubscriptionType;
 
 typedef struct {
-  int   slot;                   /* 0, 1, ... etc. */
-  int   app_index;              /* array subscriptor from applications[RIL_CARD_MAX_APPS] in
-                                   RIL_REQUEST_GET_SIM_STATUS */
-  RIL_Subscription sub_num;     /* Indicates subscription 0 or subscription 1 */
+  int   slot;                        /* 0, 1, ... etc. */
+  int   app_index;                   /* array subscriptor from applications[RIL_CARD_MAX_APPS] in
+                                        RIL_REQUEST_GET_SIM_STATUS */
+  RIL_SubscriptionType  sub_type;    /* Indicates subscription 0 or subscription 1 */
   RIL_UiccSubActStatus  act_status;
 } RIL_SelectUiccSub;
 
@@ -3452,7 +3452,7 @@ typedef struct {
 #define RIL_REQUEST_GET_DATA_CALL_PROFILE 108
 
 /**
- * RIL_REQUEST_SET_UICC_SUBSCRIPTION_SOURCE
+ * RIL_REQUEST_SET_UICC_SUBSCRIPTION
  *
  * Selects/deselects a particular application/subscription to use on a particular SIM card
  * "data" is const  RIL_SelectUiccSub*
@@ -3467,10 +3467,10 @@ typedef struct {
  *  SUBSCRIPTION_NOT_SUPPORTED
  *
  */
-#define RIL_REQUEST_SET_UICC_SUBSCRIPTION_SOURCE  109
+#define RIL_REQUEST_SET_UICC_SUBSCRIPTION 109
 
 /**
- *  RIL_REQUEST_SET_DATA_SUBSCRIPTION_SOURCE
+ *  RIL_REQUEST_SET_DATA_SUBSCRIPTION
  *
  *  Selects a subscription for data call setup
  * "data" is NULL
@@ -3485,10 +3485,10 @@ typedef struct {
  *  SUBSCRIPTION_NOT_AVAILABLE
  *
  */
-#define RIL_REQUEST_SET_DATA_SUBSCRIPTION_SOURCE  110
+#define RIL_REQUEST_SET_DATA_SUBSCRIPTION 110
 
 /**
- * RIL_REQUEST_GET_UICC_SUBSCRIPTION_SOURCE
+ * RIL_REQUEST_GET_UICC_SUBSCRIPTION
  *
  * Request to query the UICC subscription info
  * that is currently set.
@@ -3504,10 +3504,10 @@ typedef struct {
  *  SUBSCRIPTION_NOT_AVAILABLE
  *
  */
-#define RIL_REQUEST_GET_UICC_SUBSCRIPTION_SOURCE 111
+#define RIL_REQUEST_GET_UICC_SUBSCRIPTION 111
 
 /**
- * RIL_REQUEST_GET_DATA_SUBSCRIPTION_SOURCE
+ * RIL_REQUEST_GET_DATA_SUBSCRIPTION
  *
  * Request to query the Data subscription info
  * that is currently set.
@@ -3525,7 +3525,7 @@ typedef struct {
  *  SUBSCRIPTION_NOT_AVAILABLE
  *
  */
-#define RIL_REQUEST_GET_DATA_SUBSCRIPTION_SOURCE 112
+#define RIL_REQUEST_GET_DATA_SUBSCRIPTION 112
 
 /**
  *  RIL_REQUEST_SET_SUBSCRIPTION_MODE
@@ -4230,14 +4230,19 @@ typedef struct {
 #define RIL_UNSOL_STK_CC_ALPHA_NOTIFY 1039
 
 /**
- * RIL_UNSOL_SUBSCRIPTION_READY
+ * RIL_UNSOL_UICC_SUBSCRIPTION_STATUS_CHANGED
  *
- * Called when subscription is ready at RIL
+ * Called when there is a change in subscription status.
+ * This event will be sent in the following scenarios
+ *  - subscription readiness at modem, which was selected by telephony layer
+ *  - when subscription is deactivated by modem due to UICC card removal
  *
- * "data" is NULL
+ * "data" is const int *
+ * ((const int *)data)[0] == 0 for Subscription Deactivated
+ * ((const int *)data)[0] == 1 for Subscription Activated
  *
  */
-#define RIL_UNSOL_SUBSCRIPTION_READY 1040
+#define RIL_UNSOL_UICC_SUBSCRIPTION_STATUS_CHANGED 1040
 
 /**
  * RIL_UNSOL_QOS_STATE_CHANGED_IND

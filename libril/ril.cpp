@@ -1459,7 +1459,7 @@ static void dispatchUiccSubscripton(Parcel &p, RequestInfo *pRI) {
     uicc_sub.app_index = (int) t;
 
     status = p.readInt32(&t);
-    uicc_sub.sub_num = (RIL_Subscription) t;
+    uicc_sub.sub_type = (RIL_SubscriptionType) t;
 
     status = p.readInt32(&t);
     uicc_sub.act_status = (RIL_UiccSubActStatus) t;
@@ -2342,7 +2342,7 @@ static int responseUiccSubscription(Parcel &p,
     RIL_SelectUiccSub *p_cur = (RIL_SelectUiccSub *)response;
     p.writeInt32(p_cur->slot);
     p.writeInt32(p_cur->app_index);
-    p.writeInt32(p_cur->sub_num);
+    p.writeInt32(p_cur->sub_type);
     p.writeInt32(p_cur->act_status);
 
     closeResponse;
@@ -3703,10 +3703,10 @@ requestToString(int request) {
         case RIL_REQUEST_IMS_REGISTRATION_STATE: return "IMS_REGISTRATION_STATE";
         case RIL_REQUEST_IMS_SEND_SMS: return "IMS_SEND_SMS";
         case RIL_REQUEST_GET_DATA_CALL_PROFILE: return "GET_DATA_CALL_PROFILE";
-        case RIL_REQUEST_SET_UICC_SUBSCRIPTION_SOURCE: return "SET_UICC_SUBSCRIPTION_SOURCE";
-        case RIL_REQUEST_SET_DATA_SUBSCRIPTION_SOURCE: return "SET_DATA_SUBSCRIPTION_SOURCE";
-        case RIL_REQUEST_GET_UICC_SUBSCRIPTION_SOURCE: return "GET_UICC_SUBSCRIPTION_SOURCE";
-        case RIL_REQUEST_GET_DATA_SUBSCRIPTION_SOURCE: return "GET_DATA_SUBSCRIPTION_SOURCE";
+        case RIL_REQUEST_SET_UICC_SUBSCRIPTION: return "SET_UICC_SUBSCRIPTION";
+        case RIL_REQUEST_SET_DATA_SUBSCRIPTION: return "SET_DATA_SUBSCRIPTION";
+        case RIL_REQUEST_GET_UICC_SUBSCRIPTION: return "GET_UICC_SUBSCRIPTION";
+        case RIL_REQUEST_GET_DATA_SUBSCRIPTION: return "GET_DATA_SUBSCRIPTION";
         case RIL_REQUEST_SET_SUBSCRIPTION_MODE: return "SET_SUBSCRIPTION_MODE";
         case RIL_REQUEST_SET_TRANSMIT_POWER: return "SET_TRANSMIT_POWER";
         case RIL_REQUEST_SETUP_QOS: return "REQUEST_SETUP_QOS";
@@ -3752,7 +3752,7 @@ requestToString(int request) {
         case RIL_UNSOL_SUPP_SVC_NOTIFICATION: return "UNSOL_SUPP_SVC_NOTIFICATION";
         case RIL_UNSOL_RESPONSE_IMS_NETWORK_STATE_CHANGED: return "RESPONSE_IMS_NETWORK_STATE_CHANGED";
         case RIL_UNSOL_RESPONSE_TETHERED_MODE_STATE_CHANGED: return "UNSOL_RESPONSE_TETHERED_MODE_STATE_CHANGED";
-        case RIL_UNSOL_SUBSCRIPTION_READY: return "UNSOL_SUBSCRIPTION_READY";
+        case RIL_UNSOL_UICC_SUBSCRIPTION_STATUS_CHANGED: return "UNSOL_UICC_SUBSCRIPTION_STATUS_CHANGED";
         case RIL_UNSOL_QOS_STATE_CHANGED_IND: return "UNSOL_QOS_STATE_CHANGED_IND";
         default: return "<unknown request>";
     }
