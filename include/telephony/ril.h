@@ -633,12 +633,17 @@ typedef struct {
 
 typedef struct {
     int signalStrength;  /* Valid values are (0-31, 99) as defined in TS 27.007 8.5 */
-    int rsrp;            /* The current Reference Signal Receive Power in dBm.
-                          * Range: -44 to -140 dBm
-                          */
-    int rsrq;            /* The current Reference Signal Receive Quality in dB.
-                          * Range: -20 to-3 dB.
-                          */
+    int rsrp;            /* The current Reference Signal Receive Power in dBm multipled by -1.
+                          * Range: 44 to 140 dBm, INT_MAX: 0x7FFFFFFF denotes invalid value.
+                          * TODO: doc reference */
+    int rsrq;            /* The current Reference Signal Receive Quality in dB multiplied by -1.
+                          * Range: 20 to 3 dB. INT_MAX: 0x7FFFFFFF denotes invalid value
+                          * TODO: doc reference */
+    int rssnr;           /* The current reference signal signal-to-noise ratio in 0.1 dB units
+                          * Range: -200 to +300 (-200 = -20.0 dB, +300 = 30dB).
+                          * INT_MAX : 0x7FFFFFFF denote invalid value
+                          * TODO: Need doc reference */
+    int cqi;             /* TODO: Need documentation and doc reference */
 } RIL_LTE_SignalStrength;
 
 typedef struct {
