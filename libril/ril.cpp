@@ -216,6 +216,7 @@ static void dispatchCallForward(Parcel& p, RequestInfo *pRI);
 static void dispatchRaw(Parcel& p, RequestInfo *pRI);
 static void dispatchSmsWrite (Parcel &p, RequestInfo *pRI);
 static void dispatchDepersonalization(Parcel &p, RequestInfo *pRI);
+
 static void dispatchCdmaSms(Parcel &p, RequestInfo *pRI);
 static void dispatchImsSms(Parcel &p, RequestInfo *pRI);
 static void dispatchImsCdmaSms(Parcel &p, RequestInfo *pRI);

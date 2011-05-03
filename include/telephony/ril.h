@@ -1599,9 +1599,9 @@ typedef struct {
  * ((char **)response)[2] a space-separated list of IP addresses for this interface for GSM/UMTS
  *                          and NULL for CDMA
  *
- * FIXME may need way to configure QoS settings
- *
- * replaces  RIL_REQUEST_SETUP_DEFAULT_PDP
+ * Notes:
+ *   1) Numeric addresses must be in the Java InetAddress parsable representation.
+ *   2) $IN in the above comments is the interface name from response[1].
  *
  * Valid errors:
  *  SUCCESS
