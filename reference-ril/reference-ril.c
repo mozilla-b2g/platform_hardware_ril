@@ -399,19 +399,18 @@ static void requestOrSendDataCallList(RIL_Token *t)
          p_cur = p_cur->p_next)
         n++;
 
-    RIL_Data_Call_Response *responses =
-        alloca(n * sizeof(RIL_Data_Call_Response));
+    RIL_Data_Call_Response_v6 *responses =
+        alloca(n * sizeof(RIL_Data_Call_Response_v6));
 
     int i;
     for (i = 0; i < n; i++) {
         responses[i].cid = -1;
         responses[i].active = -1;
         responses[i].type = "";
-        responses[i].apn = "";
-        responses[i].address = "";
+        responses[i].addresses = "";
     }
 
-    RIL_Data_Call_Response *response = responses;
+    RIL_Data_Call_Response_v6 *response = responses;
     for (p_cur = p_response->p_intermediates; p_cur != NULL;
          p_cur = p_cur->p_next) {
         char *line = p_cur->line;
@@ -481,26 +480,28 @@ static void requestOrSendDataCallList(RIL_Token *t)
         if (err < 0)
             goto error;
 
+#if 0
         responses[i].apn = alloca(strlen(out) + 1);
         strcpy(responses[i].apn, out);
+#endif
 
         err = at_tok_nextstr(&line, &out);
         if (err < 0)
             goto error;
 
-        responses[i].address = alloca(strlen(out) + 1);
-        strcpy(responses[i].address, out);
+        responses[i].addresses = alloca(strlen(out) + 1);
+        strcpy(responses[i].addresses, out);
     }
 
     at_response_free(p_response);
 
     if (t != NULL)
         RIL_onRequestComplete(*t, RIL_E_SUCCESS, responses,
-                              n * sizeof(RIL_Data_Call_Response));
+                              n * sizeof(RIL_Data_Call_Response_v6));
     else
         RIL_onUnsolicitedResponse(RIL_UNSOL_DATA_CALL_LIST_CHANGED,
                                   responses,
-                                  n * sizeof(RIL_Data_Call_Response));
+                                  n * sizeof(RIL_Data_Call_Response_v6));
 
     return;
 
@@ -762,7 +763,7 @@ static void requestSignalStrength(void *data, size_t datalen, RIL_Token t)
     int err;
     char *line;
     int count =0;
-    int numofElements=sizeof(RIL_SignalStrength)/sizeof(int);
+    int numofElements=sizeof(RIL_SignalStrength_v6)/sizeof(int);
     int response[numofElements];
 
     err = at_send_command_singleline("AT+CSQ", "+CSQ:", &p_response);
@@ -1224,7 +1225,7 @@ static void requestRegistrationState(int request, void *data,
     int type, startfrom;
 
     LOGD("requestRegistrationState");
-    if (request == RIL_REQUEST_REGISTRATION_STATE) {
+    if (request == RIL_REQUEST_VOICE_REGISTRATION_STATE) {
         cmd = "AT+CREG?";
         prefix = "+CREG:";
         numElements = REG_STATE_LEN;
@@ -1257,7 +1258,7 @@ static void requestRegistrationState(int request, void *data,
         LOGD("registration state type: 3GPP2");
         // TODO: Query modem
         startfrom = 3;
-        if(request == RIL_REQUEST_REGISTRATION_STATE) {
+        if(request == RIL_REQUEST_VOICE_REGISTRATION_STATE) {
             asprintf(&responseStr[3], "8");     // EvDo revA
             asprintf(&responseStr[4], "1");     // BSID
             asprintf(&responseStr[5], "123");   // Latitude
@@ -1474,9 +1475,17 @@ static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
     char *cmd;
     int err;
     ATResponse *p_response = NULL;
-    char *response[2] = { "1", PPP_TTY_PATH };
 
-    apn = ((const char **)data)[2];
+    RIL_Data_Call_Response_v6 response;
+
+    response.status = PDP_FAIL_NONE;
+    response.cid = 1;
+    response.active = 2;
+    response.type = ((char**)data)[6];
+    response.ifname = (char*) PPP_TTY_PATH;
+    response.addresses = "";
+    response.dnses = "";
+    response.gateways = "";
 
 #ifdef USE_TI_COMMANDS
     // Config for multislot class 10 (probably default anyway eh?)
@@ -1574,12 +1583,13 @@ static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
 	    }
     }
 
-    RIL_onRequestComplete(t, RIL_E_SUCCESS, response, sizeof(response));
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, &response, sizeof(response));
     at_response_free(p_response);
 
     return;
 error:
-    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+    response.status = PDP_FAIL_ERROR_UNSPECIFIED;
+    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, &response, sizeof(response));
     at_response_free(p_response);
 
 }
@@ -1960,7 +1970,7 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
         case RIL_REQUEST_SIGNAL_STRENGTH:
             requestSignalStrength(data, datalen, t);
             break;
-        case RIL_REQUEST_REGISTRATION_STATE:
+        case RIL_REQUEST_VOICE_REGISTRATION_STATE:
         case RIL_REQUEST_DATA_REGISTRATION_STATE:
             requestRegistrationState(request, data, datalen, t);
             break;
@@ -2991,7 +3001,7 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
                 || strStartsWith(s,"+CGREG:")
     ) {
         RIL_onUnsolicitedResponse (
-            RIL_UNSOL_RESPONSE_NETWORK_STATE_CHANGED,
+            RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED,
             NULL, 0);
 #ifdef WORKAROUND_FAKE_CGEV
         RIL_requestTimedCallback (onDataCallListChanged, NULL, NULL);
