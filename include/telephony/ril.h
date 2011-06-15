@@ -449,9 +449,7 @@ typedef struct {
 typedef enum {
     RIL_CARDSTATE_ABSENT   = 0,
     RIL_CARDSTATE_PRESENT  = 1,
-    RIL_CARDSTATE_ERROR    = 2,
-    RIL_CARDSTATE_NOT_INITIALIZED = 3 /* Card is being initialized, Telephony layer should wait till
-                                         the state becomes ABSENT/ERROR/PRESENT */
+    RIL_CARDSTATE_ERROR    = 2
 } RIL_CardState;
 
 typedef enum {
