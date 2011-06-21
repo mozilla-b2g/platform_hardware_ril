@@ -1716,7 +1716,7 @@ static int responseCallList(Parcel &p, void *response, size_t responselen) {
         writeStringToParcel(p, p_cur->name);
         p.writeInt32(p_cur->namePresentation);
         // Remove when partners upgrade to version 3
-        if ((s_callbacks[0].version < 3) || (s_callbacks[1].version < 3) || (p_cur->uusInfo == NULL || p_cur->uusInfo->uusData == NULL)) {
+        if ((s_callbacks[0].version < 3) || (p_cur->uusInfo == NULL || p_cur->uusInfo->uusData == NULL)) {
             p.writeInt32(0); /* UUS Information is absent */
         } else {
             RIL_UUS_Info *uusInfo = p_cur->uusInfo;
