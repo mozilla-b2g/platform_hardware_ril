@@ -2666,7 +2666,10 @@ static int responseGetDataCallProfile(Parcel &p, void *response, size_t response
     LOGD("[OMH>]> processing response");
 
     /* number of profile info's */
-    num = responselen / sizeof(RIL_DataCallProfileInfo);
+    num = *((int *) response);
+    if (num > (responselen / sizeof(RIL_DataCallProfileInfo))) {
+        num = responselen / sizeof(RIL_DataCallProfileInfo);
+    }
     p.writeInt32(num);
 
     RIL_DataCallProfileInfo *p_cur = ((RIL_DataCallProfileInfo *) (response + sizeof(int)));
