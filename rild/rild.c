@@ -60,6 +60,7 @@ extern void RIL_onUnsolicitedResponse_Inst1(int unsolResponse, const void *data,
 extern void RIL_requestTimedCallback (RIL_TimedCallback callback,
                                void *param, const struct timeval *relativeTime);
 
+extern void RIL_setMaxNumClients(int num_clients);
 
 static int isMultiSimEnabled();
 static int isMultiRild();
@@ -117,12 +118,14 @@ int main(int argc, char **argv)
     static char * s_argv[MAX_LIB_ARGS];
     void *dlHandle;
     const RIL_RadioFunctions *(*rilInit)(const struct RIL_Env *, int, char **);
-    const RIL_RadioFunctions *funcs_inst[NUM_CLIENTS];
+    const RIL_RadioFunctions *funcs_inst[NUM_CLIENTS] = {NULL, NULL};
     char libPath[PROPERTY_VALUE_MAX];
     unsigned char hasLibArgs = 0;
     int j = 0;
     int i;
     static char client[3] = {'0'};
+    int numClients = 1;
+
     LOGE("**RIL Daemon Started**");
     LOGE("**RILd param count=%d**", argc);
     memset(s_argv, 0, MAX_LIB_ARGS*sizeof(char));
@@ -302,14 +305,21 @@ OpenLib:
     s_argv[argc++] = client;
 
     LOGE("RIL_Init argc = %d client = %s",argc, s_argv[argc-1]);
+
     funcs_inst[0] = rilInit(&s_rilEnv_inst0, argc, s_argv);
-    RIL_register(funcs_inst[0], 0);
 
     if (isMultiSimEnabled() && !isMultiRild()) {
         s_argv[argc-1] = "1";  //client id incase of single rild managing two instances of RIL
         LOGE("RIL_Init argc = %d client = %s",argc, s_argv[argc-1]);
         funcs_inst[1] = rilInit(&s_rilEnv_inst1, argc, s_argv);
-        RIL_register(funcs_inst[1], 1);
+        numClients++;
+    }
+
+    RIL_setMaxNumClients(numClients);
+
+    LOGD("Register the callbacks func received from RIL Init");
+    for (i = 0; i < numClients; i++) {
+        RIL_register(funcs_inst[i], i);
     }
 
 done:

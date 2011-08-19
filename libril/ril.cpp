@@ -199,6 +199,7 @@ static void *s_lastNITZTimeData = NULL;
 static size_t s_lastNITZTimeDataSize;
 
 static char rild[6] = {0};
+static int s_maxNumClients = MAX_NUM_CLIENTS;
 
 #if RILC_LOG
     static char printBuf[PRINTBUF_SIZE];
@@ -293,6 +294,15 @@ static char * RIL_getRilSocketName() {
 extern "C"
 void RIL_setRilSocketName(char * s) {
     strcpy(rild, s);
+}
+
+int RIL_getMaxNumClients() {
+    return s_maxNumClients;
+}
+
+extern "C"
+void RIL_setMaxNumClients(int num_clients) {
+    s_maxNumClients = num_clients;
 }
 
 void printfds() {
@@ -3196,9 +3206,15 @@ RIL_register (const RIL_RadioFunctions *callbacks, int client_id) {
     s_fdListen = ret;
 
 #else
-   LOGE("s_registerCalled=%d, s_started=%d ",s_registerCalled, s_started);
-   if(s_registerCalled >  1) //already done for client 0
-      return ;
+
+    LOGE("s_registerCalled = %d, s_started = %d, RIL_getMaxNumClients = %d", s_registerCalled,
+            s_started, RIL_getMaxNumClients());
+
+    // Create the rild socket only after initializing all RIL instances.
+    if (s_registerCalled != RIL_getMaxNumClients()) {
+        return ;
+    }
+
     s_fdListen = android_get_control_socket(RIL_getRilSocketName());
     if (s_fdListen < 0) {
         LOGE("Failed to get socket %s", RIL_getRilSocketName());
