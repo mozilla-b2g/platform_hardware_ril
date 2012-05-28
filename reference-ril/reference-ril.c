@@ -36,6 +36,7 @@
 #include <cutils/sockets.h>
 #include <termios.h>
 #include <sys/system_properties.h>
+#include <regex.h>
 
 #include "ril.h"
 #include "hardware/qemu_pipe.h"
@@ -1433,6 +1434,167 @@ error:
     at_response_free(p_response);
 }
 
+static int parseOperatorStatus(char **line, char **status)
+{
+    int statusCode;
+
+    int err = at_tok_nextint(line, &statusCode);
+    if (err < 0) {
+        return err;
+    }
+
+    *status = (char *) calloc(sizeof(char), 10);
+    switch (statusCode) {
+        case 0: // A_STATUS_UNKNOWN
+            strlcpy(*status, "unknown", 10);
+            break;
+        case 1: // A_STATUS_AVAILABLE
+            strlcpy(*status, "available", 10);
+            break;
+        case 2: // A_STATUS_CURRENT
+            strlcpy(*status, "current", 10);
+            break;
+        case 3: // A_STATUS_DENIED
+            strlcpy(*status, "forbidden", 10);
+            break;
+    }
+
+    return 0;
+}
+
+static int copyNextStr(char **line, char **str)
+{
+    char *buffer;
+    int bufferLen;
+
+    int err = at_tok_nextstr(line, &buffer);
+    if (err < 0) {
+        return err;
+    }
+
+    bufferLen = strlen(buffer) + 1;
+    *str = calloc(sizeof(char), bufferLen);
+    strlcpy(*str, buffer, bufferLen);
+
+    return 0;
+}
+
+static int parseOperatorInfo(char *info, char **p_operatorStart)
+{
+    int err = at_tok_start(&info);
+    if (err < 0) {
+        ALOGE("QUERY_AVAILABLE_NETWORKS: Error tokenizing operator status");
+        return err;
+    }
+
+    char *status;
+    err = parseOperatorStatus(&info, &status);
+    if (err < 0) {
+        ALOGE("QUERY_AVAILABLE_NETWORKS: Error parsing operator status");
+        return err;
+    }
+    p_operatorStart[3] = status;
+
+    // long name
+    char *longName;
+    err = copyNextStr(&info, &longName);
+    if (err < 0) {
+        ALOGE("QUERY_AVAILABLE_NETWORKS: Error copying long name from operator");
+        return err;
+    }
+    p_operatorStart[0] = longName;
+
+    // short name
+    char *shortName;
+    err = copyNextStr(&info, &shortName);
+    if (err < 0) {
+        ALOGE("QUERY_AVAILABLE_NETWORKS: Error copying short name from operator");
+        return err;
+    }
+    p_operatorStart[1] = shortName;
+
+    // numeric tuple
+    char *numeric;
+    err = copyNextStr(&info, &numeric);
+    if (err < 0) {
+        ALOGE("QUERY_AVAILABLE_NETWORKS: Error copying numeric tuple from operator");
+        return err;
+    }
+    p_operatorStart[2] = numeric;
+
+    return 0;
+}
+
+static int requestAvailableOperators(char ***p_operators, int *p_bufferSize)
+{
+    // Modem command for available operators
+    ATResponse *p_response;
+    int err = at_send_command_multiline ("AT+COPS=?", "+COPS:", &p_response);
+
+    if (err < 0 || !p_response->p_intermediates) {
+        ALOGE("Error: No operator list returned");
+        return err;
+    }
+
+    // The operator list from the emulator is non-standard
+    // so we have to jump through some  hoops to parse it
+    // correctly. With the AT protocol, usually multiple
+    // records are returned on a line-by-line basis
+    // with a special prefix on each line.
+    // With +COPS=?, the entire result is on one line,
+    // with each record surrounded in parentheses, and
+    // each record separated by commas. regex to the rescue!
+    char *line = p_response->p_intermediates->line;
+    int nMatches = 2;
+    regex_t operatorRegex;
+    regmatch_t operatorMatches[nMatches];
+
+    regcomp(&operatorRegex, "\\(([^\\)]+)\\)", REG_EXTENDED);
+
+    char *tmp = line;
+    int operatorCount = 0;
+
+    // First time around we just count the total number of operators
+    while (regexec(&operatorRegex, tmp, nMatches, operatorMatches, 0) == 0) {
+        tmp += operatorMatches[0].rm_eo;
+        ++operatorCount;
+    }
+
+    char **operators;
+    const char *prefix = "+COPS: ";
+    int i = 0, prefixLen = 7;
+
+    // 4 entries per operator: longName, shortName, numeric, status
+    *p_bufferSize = operatorCount * 4;
+    operators = (char **) malloc(sizeof(char *) * operatorCount * 4);
+
+    while (regexec(&operatorRegex, line, nMatches, operatorMatches, 0) == 0) {
+        regoff_t start = operatorMatches[1].rm_so;
+        regoff_t end = operatorMatches[1].rm_eo;
+        regoff_t length = end - start;
+
+        // We normalize by re-building the line prefix and using
+        // the standard at_tok_* functions
+        char *group = (char *) calloc(sizeof(char), prefixLen + length + 1);
+        strncat(group, prefix, prefixLen);
+        strncat(group, line + start, length);
+
+        err = parseOperatorInfo(group, &(operators[i * 4]));
+        free(group);
+
+        if (err < 0) {
+            break;
+        }
+
+        line += length;
+        ++i;
+    }
+
+    at_response_free(p_response);
+    *p_operators = operators;
+    return err;
+}
+
 static void requestOperator(void *data __unused, size_t datalen __unused, RIL_Token t)
 {
     int err;
@@ -2383,6 +2545,27 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
                 requestExitEmergencyMode(data, datalen, t);
                 break;
             } // Fall-through if tech is not cdma
+
+        case RIL_REQUEST_QUERY_AVAILABLE_NETWORKS: {
+            char **operators;
+            int i, err, entryCount;
+
+            err = requestAvailableOperators(&operators, &entryCount);
+
+            if (err < 0) {
+                RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+            } else {
+                RIL_onRequestComplete(t, RIL_E_SUCCESS,
+                    (void *) operators, entryCount * sizeof(char *));
+            }
+
+            for (i = 0; i < entryCount; i++) {
+                free(operators[i]);
+            }
+            free(operators);
+
+            break;
+        }
 
         default:
             RLOGD("Request not supported. Tech: %d",TECH(sMdmInfo));
