@@ -659,6 +659,35 @@ error:
     RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 }
 
+static void requestSetNetworkSelectionManual(
+                void *data, size_t datalen, RIL_Token t)
+{
+    int err;
+    char *cmd;
+    const char *network = (const char *) data;
+    ATResponse *p_response;
+
+    asprintf(&cmd, "AT+COPS=1,2,%s", network);
+    err = at_send_command(cmd, &p_response);
+    free(cmd);
+
+    int rilError = RIL_E_SUCCESS;
+    if (err < 0) {
+        ALOGE("requestSetNetworkSelectionManual failed, err: %d", err);
+        at_response_free(p_response);
+        RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+        return;
+    }
+
+    if (at_get_cme_error(p_response) != CME_SUCCESS) {
+        rilError = RIL_E_GENERIC_FAILURE;
+    }
+
+    at_response_free(p_response);
+
+    RIL_onRequestComplete(t, rilError, NULL, 0);
+}
+
 static void sendCallStateChanged(void *param __unused)
 {
     RIL_onUnsolicitedResponse (
@@ -2381,7 +2410,16 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
             break;
 
         case RIL_REQUEST_SET_NETWORK_SELECTION_AUTOMATIC:
-            at_send_command("AT+COPS=0", NULL);
+            err = at_send_command("AT+COPS=0", NULL);
+            if (err < 0) {
+              RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+            } else {
+              RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+            }
+            break;
+
+        case RIL_REQUEST_SET_NETWORK_SELECTION_MANUAL:
+            requestSetNetworkSelectionManual(data, datalen, t);
             break;
 
         case RIL_REQUEST_DATA_CALL_LIST:
