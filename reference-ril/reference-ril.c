@@ -673,7 +673,7 @@ static void requestSetNetworkSelectionManual(
 
     int rilError = RIL_E_SUCCESS;
     if (err < 0) {
-        ALOGE("requestSetNetworkSelectionManual failed, err: %d", err);
+        LOGE("requestSetNetworkSelectionManual failed, err: %d", err);
         at_response_free(p_response);
         RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
         return;
