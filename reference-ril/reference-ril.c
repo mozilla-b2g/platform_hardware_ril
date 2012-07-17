@@ -893,6 +893,42 @@ static void requestHangup(void *data, size_t datalen __unused, RIL_Token t)
     RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
 }
 
+static void requestLastCallFailCause(RIL_Token t)
+{
+    ATResponse *p_response = NULL;
+    int err;
+    int response = 0;
+    char *line;
+
+    err = at_send_command_singleline("AT+CEER", "+CEER:", &p_response);
+
+    if (err < 0 || p_response->success == 0) {
+        RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+        goto error;
+    }
+
+    line = p_response->p_intermediates->line;
+    err = at_tok_start(&line);
+
+    if (err < 0) {
+        goto error;
+    }
+
+    err = at_tok_nextint(&line, &response);
+
+    if (err < 0) {
+        goto error;
+    }
+
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, &response, sizeof(int));
+    at_response_free(p_response);
+    return;
+error:
+    at_response_free(p_response);
+    ALOGE("requestLastCallFailCause error!");
+    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+}
+
 static void requestSignalStrength(void *data __unused, size_t datalen __unused, RIL_Token t)
 {
     ATResponse *p_response = NULL;
@@ -2303,6 +2339,10 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
             /* success or failure is ignored by the upper layer here.
                it will call GET_CURRENT_CALLS and determine success that way */
             RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+            break;
+
+        case RIL_REQUEST_LAST_CALL_FAIL_CAUSE:
+            requestLastCallFailCause(t);
             break;
 
         case RIL_REQUEST_SEPARATE_CONNECTION:
