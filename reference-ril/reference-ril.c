@@ -2253,6 +2253,23 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 #ifdef WORKAROUND_FAKE_CGEV
         RIL_requestTimedCallback (onDataCallListChanged, NULL, NULL); //TODO use new function
 #endif /* WORKAROUND_FAKE_CGEV */
+    } else if(strStartsWith(s,"+CUSATP:")) {
+        char *pStkPdu = 0;
+        line = strdup(s);
+        err = at_tok_start(&line);
+        if (err < 0) {
+            LOGE("Error  %d \t %s\n ", err, line);
+        }
+        err = at_tok_nextstr(&line, &pStkPdu);
+        if (err < 0) {
+            LOGE("Error:  %d \t %s\n ", err, line);
+        }
+        ALOGI("STK Command PDU : %s \n", pStkPdu);
+        if(NULL != pStkPdu) {
+            RIL_onUnsolicitedResponse (RIL_UNSOL_STK_PROACTIVE_COMMAND,
+                                       pStkPdu, strlen(pStkPdu));
+        }
+        free(line);
     } else if (strStartsWith(s,"+CREG:")
                 || strStartsWith(s,"+CGREG:")
     ) {
