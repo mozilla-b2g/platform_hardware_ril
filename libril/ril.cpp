@@ -4291,9 +4291,10 @@ static void startListen(RIL_SOCKET_ID socket_id, SocketListenParam* socket_liste
 }
 
 extern "C" void
-RIL_register (const RIL_RadioFunctions *callbacks) {
+RIL_register (const RIL_RadioFunctions *callbacks, const char *clientId) {
     int ret;
     int flags;
+    char buffer[32];
 
     RLOGI("SIM_COUNT: %d", SIM_COUNT);
 
