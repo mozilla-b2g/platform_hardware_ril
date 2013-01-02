@@ -2646,9 +2646,10 @@ extern "C" void RIL_setcallbacks (const RIL_RadioFunctions *callbacks) {
 }
 
 extern "C" void
-RIL_register (const RIL_RadioFunctions *callbacks) {
+RIL_register (const RIL_RadioFunctions *callbacks, const char *clientId) {
     int ret;
     int flags;
+    char buffer[32];
 
     if (callbacks == NULL) {
         ALOGE("RIL_register: RIL_RadioFunctions * null");
@@ -2696,8 +2697,9 @@ RIL_register (const RIL_RadioFunctions *callbacks) {
 
     // start listen socket
 
+    snprintf(buffer, sizeof(buffer), "%s%s", SOCKET_NAME_RIL, clientId);
 #if 0
-    ret = socket_local_server (SOCKET_NAME_RIL,
+    ret = socket_local_server (buffer,
             ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
 
     if (ret < 0) {
@@ -2707,9 +2709,9 @@ RIL_register (const RIL_RadioFunctions *callbacks) {
     s_fdListen = ret;
 
 #else
-    s_fdListen = android_get_control_socket(SOCKET_NAME_RIL);
+    s_fdListen = android_get_control_socket(buffer);
     if (s_fdListen < 0) {
-        ALOGE("Failed to get socket '" SOCKET_NAME_RIL "'");
+        ALOGE("Failed to get socket '%s'", buffer);
         exit(-1);
     }
 
@@ -2732,9 +2734,10 @@ RIL_register (const RIL_RadioFunctions *callbacks) {
 #if 1
     // start debug interface socket
 
-    s_fdDebug = android_get_control_socket(SOCKET_NAME_RIL_DEBUG);
+    strncat(buffer, "-debug", sizeof(buffer) - 7);
+    s_fdDebug = android_get_control_socket(buffer);
     if (s_fdDebug < 0) {
-        ALOGE("Failed to get socket '" SOCKET_NAME_RIL_DEBUG "' errno:%d", errno);
+        ALOGE("Failed to get socket '%s' errno:%d", buffer, errno);
         exit(-1);
     }
 

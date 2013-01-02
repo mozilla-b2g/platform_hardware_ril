@@ -41,11 +41,12 @@
 
 static void usage(const char *argv0)
 {
-    fprintf(stderr, "Usage: %s -l <ril impl library> [-- <args for impl library>]\n", argv0);
+    fprintf(stderr, "Usage: %s -l <ril impl library> [-c <client id>] [-- <args for impl library>]\n", argv0);
     exit(-1);
 }
 
-extern void RIL_register (const RIL_RadioFunctions *callbacks);
+extern void RIL_register (const RIL_RadioFunctions *callbacks,
+                          const char *clientId);
 
 extern void RIL_onRequestComplete(RIL_Token t, RIL_Errno e,
                            void *response, size_t responselen);
@@ -100,6 +101,7 @@ void switchUser() {
 int main(int argc, char **argv)
 {
     const char * rilLibPath = NULL;
+    const char * clientId = "";
     char **rilArgv;
     void *dlHandle;
     const RIL_RadioFunctions *(*rilInit)(const struct RIL_Env *, int, char **);
@@ -113,6 +115,9 @@ int main(int argc, char **argv)
     for (i = 1; i < argc ;) {
         if (0 == strcmp(argv[i], "-l") && (argc - i > 1)) {
             rilLibPath = argv[i + 1];
+            i += 2;
+        } else if (0 == strcmp(argv[i], "-c") && (argc - i > 1)) {
+            clientId = argv[i + 1];
             i += 2;
         } else if (0 == strcmp(argv[i], "--")) {
             i++;
@@ -136,7 +141,7 @@ int main(int argc, char **argv)
     /* special override when in the emulator */
 #if 1
     {
-        static char*  arg_overrides[3];
+        static char*  arg_overrides[5];
         static char   arg_device[32];
         int           done = 0;
 
@@ -176,7 +181,8 @@ int main(int argc, char **argv)
 
                 sleep(1);
 
-                fd = qemu_pipe_open("qemud:gsm");
+                snprintf(buffer, sizeof(buffer), "qemud:gsm%s", clientId);
+                fd = qemu_pipe_open(buffer);
                 if (fd < 0) {
                     fd = socket_local_client(
                                 QEMUD_SOCKET_NAME,
@@ -187,9 +193,17 @@ int main(int argc, char **argv)
                     close(fd);
                     snprintf( arg_device, sizeof(arg_device), "%s/%s",
                                 ANDROID_SOCKET_DIR, QEMUD_SOCKET_NAME );
-
                     arg_overrides[1] = "-s";
                     arg_overrides[2] = arg_device;
+                    argc = 3;
+
+                    // DO NOT insert generic service name for compatibility.
+                    if (strcmp(clientId, "")) {
+                        arg_overrides[3] = "-c";
+                        arg_overrides[4] = clientId;
+                        argc += 2;
+                    }
+
                     done = 1;
                     break;
                 }
@@ -224,18 +238,21 @@ int main(int argc, char **argv)
             arg_device[sizeof(arg_device)-1] = 0;
             arg_overrides[1] = "-d";
             arg_overrides[2] = arg_device;
+            argc = 3;
             done = 1;
 
         } while (0);
 
         if (done) {
             argv = arg_overrides;
-            argc = 3;
             i    = 1;
             hasLibArgs = 1;
             rilLibPath = REFERENCE_RIL_PATH;
 
             ALOGD("overriding with %s %s", arg_overrides[1], arg_overrides[2]);
+            if (argc > 3) {
+                ALOGD("overriding with %s %s", arg_overrides[3], arg_overrides[4]);
+            }
         }
     }
 OpenLib:
@@ -274,7 +291,7 @@ OpenLib:
 
     funcs = rilInit(&s_rilEnv, argc, rilArgv);
 
-    RIL_register(funcs);
+    RIL_register(funcs, clientId);
 
 done:
 
