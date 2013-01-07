@@ -2288,6 +2288,25 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         RIL_onUnsolicitedResponse (
             RIL_UNSOL_RESPONSE_NEW_SMS_STATUS_REPORT,
             sms_pdu, strlen(sms_pdu));
+    } else if (strStartsWith(s, "+CBM:")) {
+        const int str_len = strlen(sms_pdu);
+        const int pdu_len = str_len / 2;
+        unsigned char *pdu, *p;
+        char c;
+        int i = 0;
+        p = pdu = (unsigned char *) malloc(sizeof(unsigned char) * pdu_len);
+        while (i < pdu_len * 2) {
+            c = sms_pdu[i++]; // High byte
+            *p = (((c >= 'a') ? (c - 'a' + 10) : (c - '0')) << 4) & 0xF0;
+            c = sms_pdu[i++]; // Low byte
+            *p |= ((c >= 'a') ? (c - 'a' + 10) : (c - '0')) & 0x0F;
+
+            ++p;
+        }
+        RIL_onUnsolicitedResponse (
+            RIL_UNSOL_RESPONSE_NEW_BROADCAST_SMS,
+            pdu, pdu_len);
+       free((char*)pdu);
     } else if (strStartsWith(s, "+CGEV:")) {
         /* Really, we can ignore NW CLASS and ME CLASS events here,
          * but right now we don't since extranous
