@@ -797,8 +797,21 @@ static void requestSignalStrength(void *data, size_t datalen, RIL_Token t)
 {
     ATResponse *p_response = NULL;
     int err;
-    int response[2];
+    int response[12];
     char *line;
+	 // Set cdma invalid values as default values.
+    response[2] = -1;
+    response[3] = -1;
+	 // Set evdo invalid values as default values.
+    response[4] = -1;
+    response[5] = -1;
+    response[6] = -1;
+	 // Set lte invalid values as default values.
+    response[7] = 99;
+    response[8] = 0x7FFFFFFF;
+    response[9] = 0x7FFFFFFF;
+    response[10] = 0x7FFFFFFF;
+    response[11] = 0x7FFFFFFF;
 
     err = at_send_command_singleline("AT+CSQ", "+CSQ:", &p_response);
 
