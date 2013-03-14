@@ -797,8 +797,23 @@ static void requestSignalStrength(void *data, size_t datalen, RIL_Token t)
 {
     ATResponse *p_response = NULL;
     int err;
-    int response[2];
+    RIL_SignalStrength_v6 response;
     char *line;
+    // Set cdma invalid values as default values. TODO (see bug 850995).
+    response.CDMA_SignalStrength.dbm = -1;
+    response.CDMA_SignalStrength.ecio = -1;
+
+    // Set evdo invalid values as default values. TODO (see bug 850995).
+    response.EVDO_SignalStrength.dbm = -1;
+    response.EVDO_SignalStrength.ecio = -1;
+    response.EVDO_SignalStrength.signalNoiseRatio = -1;
+
+    // Set lte invalid values as default values. TODO (see bug 850996).
+    response.LTE_SignalStrength.signalStrength = 99;
+    response.LTE_SignalStrength.rsrp = 0x7FFFFFFF;
+    response.LTE_SignalStrength.rsrq = 0x7FFFFFFF;
+    response.LTE_SignalStrength.rssnr = 0x7FFFFFFF;
+    response.LTE_SignalStrength.cqi = 0x7FFFFFFF;
 
     err = at_send_command_singleline("AT+CSQ", "+CSQ:", &p_response);
 
@@ -812,13 +827,13 @@ static void requestSignalStrength(void *data, size_t datalen, RIL_Token t)
     err = at_tok_start(&line);
     if (err < 0) goto error;
 
-    err = at_tok_nextint(&line, &(response[0]));
+    err = at_tok_nextint(&line, &(response.GW_SignalStrength.signalStrength));
     if (err < 0) goto error;
 
-    err = at_tok_nextint(&line, &(response[1]));
+    err = at_tok_nextint(&line, &(response.GW_SignalStrength.bitErrorRate));
     if (err < 0) goto error;
 
-    RIL_onRequestComplete(t, RIL_E_SUCCESS, response, sizeof(response));
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, (int *)&response, sizeof(response));
 
     at_response_free(p_response);
     return;
