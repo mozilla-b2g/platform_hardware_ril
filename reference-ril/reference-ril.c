@@ -2784,6 +2784,114 @@ static void requestGetHardwareConfig(void *data, size_t datalen, RIL_Token t)
    RIL_onRequestComplete(t, RIL_E_SUCCESS, &hwCfg, sizeof(hwCfg));
 }
 
+static void requestQueryCallForwardStatus(void* data, size_t datalen, RIL_Token t)
+{
+    RIL_CallForwardInfo* p_info = (RIL_CallForwardInfo*) data;
+    RIL_CallForwardInfo* p_results = NULL;
+    RIL_CallForwardInfo** pp_results = NULL;
+    ATResponse *p_response = NULL;
+    ATLine* p_cur = NULL;
+    char* cmd = NULL;
+    int i = 0;
+    int count = 0;
+    // 0 means user doesn't input serviceClass. And according to TS 27.007,
+    // the default value of class is 7 (voice, data and fax).
+    int serviceClass = (p_info->serviceClass == 0) ? 7 : p_info->serviceClass;
+
+    // Query call forwarding status.
+    asprintf(&cmd, "AT+CCFC=%d,2,,,%d", p_info->reason, serviceClass);
+    if (at_send_command_multiline(cmd, "+CCFC:", &p_response) < 0 ||
+        at_get_cme_error(p_response) != CME_SUCCESS) {
+        goto error;
+    }
+
+    // Count the call forwarding list
+    for (p_cur = p_response->p_intermediates; p_cur != NULL; p_cur = p_cur->p_next) {
+        count++;
+    }
+
+    // Init the pointer array
+    pp_results = (RIL_CallForwardInfo**) malloc(count * sizeof(RIL_CallForwardInfo*));
+    p_results = (RIL_CallForwardInfo*) malloc(count * sizeof(RIL_CallForwardInfo));
+    memset(p_results, 0, count * sizeof(RIL_CallForwardInfo));
+
+    for (i = 0; i < count; i++) {
+        pp_results[i] = &p_results[i];
+    }
+
+    // Parse the AT command result
+    // +CCFC: <status>,<class1>[,<number>,<type>[,<subaddr>,<satype>[,<time>]]
+    for (i = 0, p_cur = p_response->p_intermediates; p_cur != NULL; p_cur = p_cur->p_next, i++) {
+        char* line = p_cur->line;
+        char* subaddr = NULL;
+        char* satype = NULL;
+
+        p_results[i].reason = p_info->reason;
+
+        if (at_tok_start(&line) < 0) {
+            goto error;
+        }
+
+        // Get <status>
+        if (at_tok_nextint(&line, &p_results[i].status) < 0) {
+            goto error;
+        }
+
+        // Get <class1>
+        if (at_tok_nextint(&line, &p_results[i].serviceClass) < 0) {
+            goto error;
+        }
+
+        if (!at_tok_hasmore(&line)) {
+            continue;
+        }
+
+        // Get <number>
+        if (at_tok_nextstr(&line, &p_results[i].number) < 0) {
+            goto error;
+        }
+
+        // Get <type>
+        if (at_tok_nextint(&line, &p_results[i].toa) < 0) {
+            goto error;
+        }
+
+        if (!at_tok_hasmore(&line)) {
+            continue;
+        }
+
+        // Get <subaddr>
+        if (at_tok_nextstr(&line, &subaddr) < 0) {
+            goto error;
+        }
+
+        // Get <satype>
+        if (at_tok_nextstr(&line, &satype) < 0) {
+            goto error;
+        }
+
+        if (!at_tok_hasmore(&line)) {
+            continue;
+        }
+
+        // Get <time>
+        if (at_tok_nextint(&line, &p_results[i].timeSeconds) < 0) {
+            goto error;
+        }
+    }
+
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, pp_results, count * sizeof(RIL_CallForwardInfo*));
+    goto done;
+
+error:
+    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+
+done:
+    at_response_free(p_response);
+    free(pp_results);
+    free(p_results);
+    free(cmd);
+}
 
 /*** Callback methods from the RIL library to us ***/
 
@@ -3302,6 +3410,10 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
 
         case RIL_REQUEST_SET_SMSC_ADDRESS:
             requestSetSmscAddress(request, data, datalen, t);
+            break;
+
+        case RIL_REQUEST_QUERY_CALL_FORWARD_STATUS:
+            requestQueryCallForwardStatus(data, datalen, t);
             break;
 
         default:
