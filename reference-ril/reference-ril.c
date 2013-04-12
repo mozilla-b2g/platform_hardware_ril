@@ -1458,13 +1458,14 @@ error:
 static void  requestEnterSimPin(void*  data, size_t  datalen, RIL_Token  t)
 {
     ATResponse   *p_response = NULL;
+    int           retries = -1;
     int           err;
     char*         cmd = NULL;
     const char**  strings = (const char**)data;;
 
-    if ( datalen == sizeof(char*) ) {
+    if ( datalen == 2*sizeof(char*) ) {
         asprintf(&cmd, "AT+CPIN=%s", strings[0]);
-    } else if ( datalen == 2*sizeof(char*) ) {
+    } else if ( datalen == 3*sizeof(char*) ) {
         asprintf(&cmd, "AT+CPIN=%s,%s", strings[0], strings[1]);
     } else
         goto error;
@@ -1473,10 +1474,43 @@ static void  requestEnterSimPin(void*  data, size_t  datalen, RIL_Token  t)
     free(cmd);
 
     if (err < 0 || p_response->success == 0) {
+        at_response_free(p_response);
+
+        // Get remaining PIN retries
+        char* line = NULL;
+        char* type = NULL;
+
+        asprintf(&cmd, "AT+CPINR=SIM PIN");
+        err = at_send_command_singleline(cmd, "+CPINR:", &p_response);
+        free(cmd);
+
+        if (err < 0 || p_response->success == 0) {
+            goto error;
+        }
+
+        line = p_response->p_intermediates->line;
+        err = at_tok_start(&line);
+
+        if (err < 0) {
+            goto error;
+        }
+
+        err = at_tok_nextstr(&line, &type);
+
+        if (err < 0) {
+            goto error;
+        }
+
+        err = at_tok_nextint(&line, &retries);
+
+        if (err < 0) {
+            retries = -1;
+        }
 error:
-        RIL_onRequestComplete(t, RIL_E_PASSWORD_INCORRECT, NULL, 0);
+        RIL_onRequestComplete(t, RIL_E_PASSWORD_INCORRECT, &retries, sizeof(int));
     } else {
-        RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+        retries = 0;
+        RIL_onRequestComplete(t, RIL_E_SUCCESS, &retries, sizeof(int));
     }
     at_response_free(p_response);
 }
