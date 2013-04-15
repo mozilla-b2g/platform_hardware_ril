@@ -2893,6 +2893,46 @@ done:
     free(cmd);
 }
 
+static void requestSetCallForward(void* data, size_t datalen, RIL_Token t)
+{
+    // Modem command for call forwarding status
+    RIL_CallForwardInfo* p_info = (RIL_CallForwardInfo*) data;
+    ATResponse *p_response = NULL;
+    char* cmd = NULL;
+
+    switch (p_info->status) {
+        case 0: /* disable */
+        case 1: /* enable  */
+        case 3: /* registeration */
+        case 4: /* erasure */
+            asprintf(&cmd, "AT+CCFC=%d,%d,\"%s\",%d,%d,,,%d", p_info->reason
+                                                            , p_info->status
+                                                            , p_info->number
+                                                            , p_info->toa
+                                                            , p_info->serviceClass
+                                                            , p_info->timeSeconds);
+            break;
+
+        default:
+            goto error;
+    }
+
+    if (at_send_command(cmd, &p_response) < 0 ||
+        at_get_cme_error(p_response) != CME_SUCCESS) {
+        goto error;
+    }
+
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    goto done;
+
+error:
+    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+
+done:
+    free(cmd);
+    at_response_free(p_response);
+}
+
 /*** Callback methods from the RIL library to us ***/
 
 /**
@@ -3414,6 +3454,10 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
 
         case RIL_REQUEST_QUERY_CALL_FORWARD_STATUS:
             requestQueryCallForwardStatus(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_SET_CALL_FORWARD:
+            requestSetCallForward(data, datalen, t);
             break;
 
         default:
