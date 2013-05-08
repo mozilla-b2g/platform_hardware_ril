@@ -26,8 +26,8 @@
 extern "C" {
 #endif
 
-#define RIL_VERSION 6     /* Current version */
-#define RIL_VERSION_MIN 2 /* Minimum RIL_VERSION supported */
+#define RIL_VERSION 7     /* Current version */
+#define RIL_VERSION_MIN 6 /* Minimum RIL_VERSION supported */
 
 #define CDMA_ALPHA_INFO_BUFFER_LENGTH 64
 #define CDMA_NUMBER_INFO_BUFFER_LENGTH 81
@@ -71,6 +71,7 @@ typedef enum {
 typedef enum {
     RADIO_STATE_OFF = 0,                   /* Radio explictly powered off (eg CFUN=0) */
     RADIO_STATE_UNAVAILABLE = 1,           /* Radio unavailable (eg, resetting or not booted) */
+    /* States 2-9 below are deprecated. Just leaving them here for backward compatibility. */
     RADIO_STATE_SIM_NOT_READY = 2,         /* Radio is on, but the SIM interface is not ready */
     RADIO_STATE_SIM_LOCKED_OR_ABSENT = 3,  /* SIM PIN locked, PUK required, network
                                               personalization locked, or SIM absent */
@@ -80,7 +81,8 @@ typedef enum {
     RADIO_STATE_RUIM_LOCKED_OR_ABSENT = 7, /* RUIM PIN locked, PUK required, network
                                               personalization locked, or RUIM absent */
     RADIO_STATE_NV_NOT_READY = 8,          /* Radio is on, but the NV interface is not available */
-    RADIO_STATE_NV_READY = 9               /* Radio is on and the NV interface is available */
+    RADIO_STATE_NV_READY = 9,              /* Radio is on and the NV interface is available */
+    RADIO_STATE_ON = 10                    /* Radio is on */
 } RIL_RadioState;
 
 typedef enum {
@@ -99,7 +101,8 @@ typedef enum {
     RADIO_TECH_EVDO_B = 12,
     RADIO_TECH_EHRPD = 13,
     RADIO_TECH_LTE = 14,
-    RADIO_TECH_HSPAP = 15 // HSPA+
+    RADIO_TECH_HSPAP = 15, // HSPA+
+    RADIO_TECH_GSM = 16 // Only supports voice
 } RIL_RadioTechnology;
 
 // Do we want to split Data from Voice and the use
@@ -529,15 +532,31 @@ typedef struct
   RIL_AppStatus applications[RIL_CARD_MAX_APPS];
 } RIL_CardStatus_v6;
 
-/* The result of a SIM refresh, returned in data[0] of RIL_UNSOL_SIM_REFRESH */
+/** The result of a SIM refresh, returned in data[0] of RIL_UNSOL_SIM_REFRESH
+ *      or as part of RIL_SimRefreshResponse_v7
+ */
 typedef enum {
     /* A file on SIM has been updated.  data[1] contains the EFID. */
     SIM_FILE_UPDATE = 0,
-    /* SIM initialized.  All files should be re-read. data[1] contains AID that caused REFRESH */
+    /* SIM initialized.  All files should be re-read. */
     SIM_INIT = 1,
     /* SIM reset.  SIM power required, SIM may be locked and all files should be re-read. */
     SIM_RESET = 2
 } RIL_SimRefreshResult;
+
+typedef struct {
+    RIL_SimRefreshResult result;
+    int                  ef_id; /* is the EFID of the updated file if the result is */
+                                /* SIM_FILE_UPDATE or 0 for any other result. */
+    char *               aid;   /* is AID(application ID) of the card application */
+                                /* See ETSI 102.221 8.1 and 101.220 4 */
+                                /*     For SIM_FILE_UPDATE result it can be set to AID of */
+                                /*         application in which updated EF resides or it can be */
+                                /*         NULL if EF is outside of an application. */
+                                /*     For SIM_INIT result this field is set to AID of */
+                                /*         application that caused REFRESH */
+                                /*     For SIM_RESET result it is NULL. */
+} RIL_SimRefreshResponse_v7;
 
 /* Deprecated, use RIL_CDMA_CallWaiting_v6 */
 typedef struct {
@@ -1013,7 +1032,7 @@ typedef struct {
  *
  * Get the SIM IMSI
  *
- * Only valid when radio state is "RADIO_STATE_SIM_READY"
+ * Only valid when radio state is "RADIO_STATE_ON"
  *
  * "data" is const char **
  * ((const char **)data)[0] is AID value, See ETSI 102.221 8.1 and 101.220 4, NULL if no value.
@@ -1344,6 +1363,15 @@ typedef struct {
  *      40 == No PDP context activated
  * ((const char **)response)[5] The maximum number of simultaneous Data Calls that can be
  *                              established using RIL_REQUEST_SETUP_DATA_CALL.
+ *
+ * The values at offsets 6..10 are optional LTE location information in decimal.
+ * If a value is unknown that value may be NULL. If all values are NULL,
+ * none need to be present.
+ *  ((const char **)response)[6] is TAC, a 16-bit Tracking Area Code.
+ *  ((const char **)response)[7] is CID, a 0-503 Physical Cell Identifier.
+ *  ((const char **)response)[8] is ECI, a 28-bit E-UTRAN Cell Identifier.
+ *  ((const char **)response)[9] is CSGID, a 27-bit Closed Subscriber Group Identity.
+ *  ((const char **)response)[10] is TADV, a 6-bit timing advance value.
  *
  * LAC and CID are in hexadecimal format.
  * valid LAC are 0x0000 - 0xffff
@@ -3268,6 +3296,23 @@ typedef struct {
  */
 #define RIL_REQUEST_STK_SEND_ENVELOPE_WITH_STATUS 107
 
+/**
+ * RIL_REQUEST_VOICE_RADIO_TECH
+ *
+ * Query the radio technology type (3GPP/3GPP2) used for voice. Query is valid only
+ * when radio state is RADIO_STATE_ON
+ *
+ * "data" is NULL
+ * "response" is int *
+ * ((int *) response)[0] is of type const RIL_RadioTechnology
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_VOICE_RADIO_TECH 108
+
 
 /***********************************************************************/
 
@@ -3515,14 +3560,17 @@ typedef struct {
  * Indicates that file(s) on the SIM have been updated, or the SIM
  * has been reinitialized.
  *
+ * In the case where RIL is version 6 or older:
  * "data" is an int *
  * ((int *)data)[0] is a RIL_SimRefreshResult.
  * ((int *)data)[1] is the EFID of the updated file if the result is
- * SIM_FILE_UPDATE, AID(application ID) of the card application
- * triggering the REFRESH if the result is SIM_INIT, or NULL for any other result.
+ * SIM_FILE_UPDATE or NULL for any other result.
  *
- * Note: If the radio state changes as a result of the SIM refresh (eg,
- * SIM_READY -> SIM_LOCKED_OR_ABSENT), RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED
+ * In the case where RIL is version 7:
+ * "data" is a RIL_SimRefreshResponse_v7 *
+ *
+ * Note: If the SIM state changes as a result of the SIM refresh (eg,
+ * SIM_READY -> SIM_LOCKED_OR_ABSENT), RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED
  * should be sent.
  */
 #define RIL_UNSOL_SIM_REFRESH 1017
@@ -3731,6 +3779,19 @@ typedef struct {
  * ((int *)data)[0] is RIL_VERSION
  */
 #define RIL_UNSOL_RIL_CONNECTED 1034
+
+/**
+ * RIL_UNSOL_VOICE_RADIO_TECH_CHANGED
+ *
+ * Indicates that voice technology has changed. Contains new radio technology
+ * as a data in the message.
+ *
+ * "data" is int *
+ * ((int *)data)[0] is of type const RIL_RadioTechnology
+ *
+ */
+#define RIL_UNSOL_VOICE_RADIO_TECH_CHANGED 1035
+
 
 /***********************************************************************/
 
