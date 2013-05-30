@@ -2053,6 +2053,55 @@ static void requestExitEmergencyMode(void *data, size_t datalen, RIL_Token t)
     RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
 }
 
+static void requestGetSmscAddress(int request, void *data, size_t datalen, RIL_Token t)
+{
+    ATResponse *p_response = NULL;
+    int err;
+    char *line;
+
+    err = at_send_command_singleline("AT+CSCA?", "+CSCA:", &p_response);
+
+    if (err < 0 || p_response->success == 0) {
+        goto error;
+    }
+
+    line = p_response->p_intermediates->line;
+
+    err = at_tok_start(&line);
+    if (err < 0) goto error;
+
+    // Skip first space
+    line++;
+
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, line, strlen(line));
+
+    at_response_free(p_response);
+    return;
+
+error:
+    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+    at_response_free(p_response);
+    return;
+}
+
+static void requestSetSmscAddress(int request, void *data, size_t datalen, RIL_Token t)
+{
+    ATResponse *p_response = NULL;
+    int err;
+    char cmd[64];
+
+    snprintf(cmd, sizeof(cmd), "AT+CSCA=%s", data);
+    err = at_send_command(cmd, &p_response);
+
+    if (err < 0 || p_response->success == 0) {
+        RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+        return;
+    }
+
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    return;
+}
+
 // TODO: Use all radio types
 static int techFromModemType(int mdmtype)
 {
@@ -2473,6 +2522,14 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
                 requestExitEmergencyMode(data, datalen, t);
                 break;
             } // Fall-through if tech is not cdma
+
+        case RIL_REQUEST_GET_SMSC_ADDRESS:
+            requestGetSmscAddress(request, data, datalen, t);
+            break;
+
+        case RIL_REQUEST_SET_SMSC_ADDRESS:
+            requestSetSmscAddress(request, data, datalen, t);
+            break;
 
         default:
             ALOGD("Request not supported. Tech: %d",TECH(sMdmInfo));
