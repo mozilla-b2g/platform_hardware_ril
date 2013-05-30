@@ -2351,17 +2351,6 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
         return;
     }
 
-    /* Ignore all non-power requests when RADIO_STATE_OFF
-     * (except RIL_REQUEST_GET_SIM_STATUS)
-     */
-    if (sState == RADIO_STATE_OFF
-        && !(request == RIL_REQUEST_RADIO_POWER
-            || request == RIL_REQUEST_GET_SIM_STATUS)
-    ) {
-        RIL_onRequestComplete(t, RIL_E_RADIO_NOT_AVAILABLE, NULL, 0);
-        return;
-    }
-
     switch (request) {
         case RIL_REQUEST_GET_SIM_STATUS: {
             RIL_CardStatus_v6 *p_card_status;
