@@ -3572,7 +3572,7 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
             case 1: // current mode correctly parsed
             case 0: // preferred mode correctly parsed
                 mask = 1 << tech;
-                if (mask != MDM_GSM && mask != MDM_CDMA &&
+                if (mask != MDM_GSM && mask != MDM_CDMA && mask != MDM_EVDO &&
                      mask != MDM_WCDMA && mask != MDM_LTE) {
                     RLOGE("Unknown technology %d\n", tech);
                 } else {
