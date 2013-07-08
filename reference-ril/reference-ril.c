@@ -632,7 +632,7 @@ static void requestSetNetworkSelectionManual(
 
     int rilError = RIL_E_SUCCESS;
     if (err < 0) {
-        LOGE("requestSetNetworkSelectionManual failed, err: %d", err);
+        ALOGE("requestSetNetworkSelectionManual failed, err: %d", err);
         at_response_free(p_response);
         RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
         return;
@@ -3276,11 +3276,11 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         line = strdup(s);
         err = at_tok_start(&line);
         if (err < 0) {
-            LOGE("Error  %d \t %s\n ", err, line);
+            ALOGE("Error  %d \t %s\n ", err, line);
         }
         err = at_tok_nextstr(&line, &pStkPdu);
         if (err < 0) {
-            LOGE("Error:  %d \t %s\n ", err, line);
+            ALOGE("Error:  %d \t %s\n ", err, line);
         }
         ALOGI("STK Command PDU : %s \n", pStkPdu);
         if(NULL != pStkPdu) {
