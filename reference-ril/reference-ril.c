@@ -1439,7 +1439,7 @@ static void requestRegistrationState(int request, void *data,
         // TODO: Query modem
         startfrom = 3;
         if(request == RIL_REQUEST_VOICE_REGISTRATION_STATE) {
-            asprintf(&responseStr[3], "8");     // EvDo revA
+            asprintf(&responseStr[3], "%d", type);  // Radio Technology
             asprintf(&responseStr[4], "1");     // BSID
             asprintf(&responseStr[5], "123");   // Latitude
             asprintf(&responseStr[6], "222");   // Longitude
