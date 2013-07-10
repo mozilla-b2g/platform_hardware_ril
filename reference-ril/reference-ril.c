@@ -1626,7 +1626,10 @@ static void requestRegistrationState(int request, void *data,
         RLOGD("registration state type: 3GPP2");
         // TODO: Query modem
         if(request == RIL_REQUEST_VOICE_REGISTRATION_STATE) {
-            asprintf(&responseStr[3], "8");     // EvDo revA
+            // NOTE: The emulator implementation of Radio Technology doesn't
+            // follow the spec in +CREG and +CGREG, please refer to Bug 1189153
+            // for more information.
+            asprintf(&responseStr[3], "%d", type); // Radio Technology
             asprintf(&responseStr[4], "1");     // BSID
             asprintf(&responseStr[5], "123");   // Latitude
             asprintf(&responseStr[6], "222");   // Longitude
