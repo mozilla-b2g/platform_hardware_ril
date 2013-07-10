@@ -150,3 +150,20 @@
     {RIL_REQUEST_STOP_LCE, dispatchVoid, responseLceStatus},
     {RIL_REQUEST_PULL_LCEDATA, dispatchVoid, responseLceData},
     {RIL_REQUEST_GET_ACTIVITY_INFO, dispatchVoid, responseActivityData},
+    /* unsupported/unused request numbers below */
+    {0, NULL, NULL},
+    {0, NULL, NULL},
+    {0, NULL, NULL},
+    {0, NULL, NULL},
+    {0, NULL, NULL}, /* 140 */
+    {0, NULL, NULL},
+    {0, NULL, NULL},
+    {0, NULL, NULL},
+    {0, NULL, NULL},
+    {0, NULL, NULL},
+    {0, NULL, NULL},
+    {0, NULL, NULL},
+    {0, NULL, NULL},
+    {0, NULL, NULL},
+    /* Mozilla-defined requests below */
+    {RIL_REQUEST_GET_UNLOCK_RETRY_COUNT, dispatchStrings, responseInts},
