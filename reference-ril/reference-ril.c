@@ -2114,6 +2114,59 @@ static void requestSetSmscAddress(int request, void *data, size_t datalen, RIL_T
     return;
 }
 
+static void requestGetUnlockRetryCount(void*  data, size_t  datalen, RIL_Token  t)
+{
+    ATResponse   *p_response = NULL;
+    int           err;
+    char*         cmd = NULL;
+    const char**  strings = (const char**)data;
+    char*         line = NULL;
+    char*         type = NULL;
+    int           retries[2];
+
+    if ( datalen == sizeof(char*) ) {
+        asprintf(&cmd, "AT+CPINR=%s", strings[0]);
+    } else
+        goto error;
+
+    err = at_send_command_singleline(cmd, "+CPINR:", &p_response);
+    free(cmd);
+    if (err < 0 || p_response->success == 0) {
+        goto error;
+    }
+
+    line = p_response->p_intermediates->line;
+
+    err = at_tok_start(&line);
+    if (err < 0) {
+        goto error;
+    }
+
+    err = at_tok_nextstr(&line, &type);
+    if (err < 0) {
+        goto error;
+    }
+
+    err = at_tok_nextint(&line, retries+0);
+    if (err < 0) {
+        goto error;
+    }
+
+    err = at_tok_nextint(&line, retries+1);
+    if (err < 0) {
+        goto error;
+    }
+
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, retries, sizeof(retries));
+    at_response_free(p_response);
+
+    return;
+
+error:
+    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+    at_response_free(p_response);
+}
+
 // TODO: Use all radio types
 static int techFromModemType(int mdmtype)
 {
@@ -2435,6 +2488,10 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
         case RIL_REQUEST_CHANGE_SIM_PIN:
         case RIL_REQUEST_CHANGE_SIM_PIN2:
             requestEnterSimPin(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_GET_UNLOCK_RETRY_COUNT:
+            requestGetUnlockRetryCount(data, datalen, t);
             break;
 
         case RIL_REQUEST_QUERY_AVAILABLE_NETWORKS: {
