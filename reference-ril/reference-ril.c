@@ -3337,8 +3337,16 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         }
     } else if (strStartsWith(s,"+CRING:")
                 || strStartsWith(s,"RING")
-                || strStartsWith(s,"NO CARRIER")
+    ) {
+        RIL_onUnsolicitedResponse (
+            RIL_UNSOL_CALL_RING,
+            NULL, 0);
+        RIL_onUnsolicitedResponse (
+            RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
+            NULL, 0);
+    } else if (strStartsWith(s,"NO CARRIER")
                 || strStartsWith(s,"+CCWA")
+                || strStartsWith(s, "CALL STATE CHANGED")
     ) {
         RIL_onUnsolicitedResponse (
             RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
