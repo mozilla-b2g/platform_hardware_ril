@@ -1874,7 +1874,7 @@ static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
         err = at_send_command("AT+CGEREP=1,0", NULL);
 
         // Hangup anything that's happening there now
-        err = at_send_command("AT+CGACT=1,0", NULL);
+        err = at_send_command("AT+CGACT=0,1", NULL);
 
         // Start data on PDP context 1
         err = at_send_command("ATD*99***1#", &p_response);
@@ -1893,6 +1893,30 @@ error:
     RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
     at_response_free(p_response);
 
+}
+
+static void requestDeactivateDataCall(void *data, size_t datalen, RIL_Token t)
+{
+    ATResponse *p_response = NULL;
+    int err;
+    char *cmd, *cid;
+
+    cid = ((char **)data)[0];
+    asprintf(&cmd, "AT+CGACT=0,%s", cid);
+    err = at_send_command(cmd, &p_response);
+    if (err < 0 || p_response->success == 0) {
+        goto error;
+    }
+
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    at_response_free(p_response);
+    free(cmd);
+    return;
+
+error:
+    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+    at_response_free(p_response);
+    free(cmd);
 }
 
 static void requestSMSAcknowledge(void *data, size_t datalen, RIL_Token t)
@@ -2468,6 +2492,9 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
         }
         case RIL_REQUEST_SETUP_DATA_CALL:
             requestSetupDataCall(data, datalen, t);
+            break;
+        case RIL_REQUEST_DEACTIVATE_DATA_CALL:
+            requestDeactivateDataCall(data, datalen, t);
             break;
         case RIL_REQUEST_SMS_ACKNOWLEDGE:
             requestSMSAcknowledge(data, datalen, t);
