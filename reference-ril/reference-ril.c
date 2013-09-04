@@ -930,6 +930,54 @@ error:
     RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 }
 
+static void requestConference(RIL_Token t)
+{
+    ATResponse *p_response = NULL;
+    int err;
+
+    // 3GPP 22.030 6.5.5
+    // "Adds a held call to the conversation"
+    err = at_send_command("AT+CHLD=3", &p_response);
+    if (err < 0 || at_get_cme_error(p_response) != CME_SUCCESS)
+        goto error;
+
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    at_response_free(p_response);
+    return;
+error:
+    at_response_free(p_response);
+    ALOGE("requestConference error!");
+    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+}
+
+static void requestSeparateConnection(void *data, size_t datalen, RIL_Token t)
+{
+    char  cmd[12];
+    int   party = ((int*)data)[0];
+
+    ATResponse *p_response = NULL;
+    int err;
+
+    // Make sure that party is in a valid range.
+    // (Note: The Telephony middle layer imposes a range of 1 to 7.
+    // It's sufficient for us to just make sure it's single digit.)
+    if (party <= 0 || party >=10)
+        goto error;
+
+    sprintf(cmd, "AT+CHLD=2%d", party);
+    err = at_send_command(cmd, &p_response);
+    if (err < 0 || at_get_cme_error(p_response) != CME_SUCCESS)
+        goto error;
+
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    at_response_free(p_response);
+    return;
+error:
+    at_response_free(p_response);
+    ALOGE("requestSeparateConnection error!");
+    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+}
+
 static void requestSignalStrength(void *data __unused, size_t datalen __unused, RIL_Token t)
 {
     ATResponse *p_response = NULL;
@@ -2609,14 +2657,9 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
             RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
             break;
         case RIL_REQUEST_CONFERENCE:
-            // 3GPP 22.030 6.5.5
-            // "Adds a held call to the conversation"
-            at_send_command("AT+CHLD=3", NULL);
-
-            /* success or failure is ignored by the upper layer here.
-               it will call GET_CURRENT_CALLS and determine success that way */
-            RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+            requestConference(t);
             break;
+
         case RIL_REQUEST_UDUB:
             /* user determined user busy */
             /* sometimes used: ATH */
@@ -2632,21 +2675,7 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
             break;
 
         case RIL_REQUEST_SEPARATE_CONNECTION:
-            {
-                char  cmd[12];
-                int   party = ((int*)data)[0];
-
-                // Make sure that party is in a valid range.
-                // (Note: The Telephony middle layer imposes a range of 1 to 7.
-                // It's sufficient for us to just make sure it's single digit.)
-                if (party > 0 && party < 10) {
-                    sprintf(cmd, "AT+CHLD=2%d", party);
-                    at_send_command(cmd, NULL);
-                    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
-                } else {
-                    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
-                }
-            }
+            requestSeparateConnection(data, datalen, t);
             break;
 
         case RIL_REQUEST_SIGNAL_STRENGTH:
