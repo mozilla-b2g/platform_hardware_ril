@@ -2239,6 +2239,36 @@ error:
     at_response_free(p_response);
 }
 
+static void requestScreenState(void* data, size_t datalen, RIL_Token t)
+{
+    int*        on;
+    int         err;
+    char*       cmd = NULL;
+    ATResponse* p_response = NULL;
+
+    if ( datalen != sizeof(int) )
+        goto error;
+
+    on = data;
+
+    asprintf(&cmd, "AT+CREG=%d", 1 + !!(on[0]));
+
+    err = at_send_command(cmd, &p_response);
+    free(cmd);
+    if (err < 0 || p_response->success == 0) {
+        goto error;
+    }
+
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    at_response_free(p_response);
+
+    return;
+
+error:
+    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+    at_response_free(p_response);
+}
+
 // TODO: Use all radio types
 static int techFromModemType(int mdmtype)
 {
@@ -2633,6 +2663,10 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
 
         case RIL_REQUEST_GET_UNLOCK_RETRY_COUNT:
             requestGetUnlockRetryCount(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_SCREEN_STATE:
+            requestScreenState(data, datalen, t);
             break;
 
         case RIL_REQUEST_VOICE_RADIO_TECH:
