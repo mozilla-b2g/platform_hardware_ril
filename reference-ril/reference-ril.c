@@ -3451,6 +3451,8 @@ setRadioTechnology(ModemInfo *mdm, int newtech)
             if (tech > 0 ) {
                 RIL_onUnsolicitedResponse(RIL_UNSOL_VOICE_RADIO_TECH_CHANGED,
                                           &tech, sizeof(tech));
+                RIL_onUnsolicitedResponse(RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED,
+                                          NULL, 0);
             }
         }
     }
