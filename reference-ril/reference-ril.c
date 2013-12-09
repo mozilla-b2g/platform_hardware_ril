@@ -18,6 +18,7 @@
 #include <telephony/ril_cdma_sms.h>
 #include <telephony/librilutils.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
 #include <string.h>
 #include <errno.h>
@@ -34,6 +35,7 @@
 #include <getopt.h>
 #include <sys/socket.h>
 #include <cutils/sockets.h>
+#include <netutils/ifc.h>
 #include <termios.h>
 #include <sys/system_properties.h>
 #include <regex.h>
@@ -2008,6 +2010,43 @@ error2:
     RIL_onRequestComplete(t, RIL_E_SMS_SEND_FAIL_RETRY, &response, sizeof(response));
 }
 
+static int configureInterface(const char* ifname, const char *addr)
+{
+    char ip[16];
+    int prefixLen, ret = -1;
+
+    if (2 != sscanf(addr, "%[.0-9]/%d", ip, &prefixLen))
+        return ret;
+
+    if (ifc_init())
+        return ret;
+
+    if (!ifc_up(ifname)) {
+        if (ifc_set_addr(ifname, inet_addr(ip)) ||
+            ifc_set_prefixLength(ifname, prefixLen)) {
+            ifc_down(ifname);
+        } else {
+            ret = 0;
+        }
+    }
+
+    ifc_close();
+
+    return ret;
+}
+
+static int deconfigureInterface(const char* ifname)
+{
+    int ret;
+
+    if (ifc_init())
+        return -1;
+
+    ret = ifc_down(ifname);
+    ifc_close();
+    return ret;
+}
+
 static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
 {
     const char *apn;
@@ -2088,6 +2127,8 @@ static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
         if (qmistatus < 0) goto error;
 
     } else {
+        RIL_Data_Call_Response_v6 tmp_rp;
+        int ret;
 
         if (datalen > 6 * sizeof(char *)) {
             pdp_type = ((const char **)data)[6];
@@ -2113,11 +2154,25 @@ static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
         err = at_send_command("AT+CGACT=0,1", NULL);
 
         // Start data on PDP context 1
-        err = at_send_command("ATD*99***1#", &p_response);
+        err = at_send_command("ATD*99***1#", NULL);
 
+        // Retrieve dynamic properties & setup kernel iface
+        err = at_send_command_singleline("AT+CGCONTRDP=1", "+CGCONTRDP:", &p_response);
         if (err < 0 || p_response->success == 0) {
             goto error;
         }
+
+        if (parseCGCONTRDP(p_response->p_intermediates->line, &tmp_rp) < 0)
+            goto error;
+
+        ret = configureInterface(tmp_rp.ifname, tmp_rp.addresses);
+        if (ret < 0) {
+            deconfigureInterface(tmp_rp.ifname);
+            freeParsedCGCONTRDP(&tmp_rp);
+            goto error;
+        }
+
+        freeParsedCGCONTRDP(&tmp_rp);
     }
 
     requestOrSendDataCallList(&t);
@@ -2143,6 +2198,9 @@ static void requestDeactivateDataCall(void *data, size_t datalen, RIL_Token t)
     if (err < 0 || p_response->success == 0) {
         goto error;
     }
+
+    // TODO: Bug 821578: B2G Emulator: Support data call with multiple APN
+    deconfigureInterface("rmnet0");
 
     RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
     at_response_free(p_response);
