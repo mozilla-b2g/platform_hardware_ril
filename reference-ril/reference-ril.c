@@ -3590,6 +3590,29 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         RIL_onUnsolicitedResponse(RIL_UNSOL_CDMA_PRL_CHANGED, &version, sizeof(version));
     } else if (strStartsWith(s, "+CFUN: 0")) {
         setRadioState(RADIO_STATE_OFF);
+    } else if (strStartsWith(s, "+CSQ:")) {
+        int count =0;
+        int numofElements = sizeof(RIL_SignalStrength_v6)/sizeof(int);
+        int response[numofElements];
+        line = p = strdup(s);
+        if (!line) {
+            ALOGE("+CSQ: Unable to allocate memory");
+            return;
+        }
+        if (at_tok_start(&p) < 0) {
+            ALOGE("invalid +CSQ response: %s", s);
+            free(line);
+            return;
+        }
+        for (count = 0; count < numofElements; count++) {
+            err = at_tok_nextint(&p, &(response[count]));
+            if (err != 0) {
+                free(line);
+                return;
+            }
+        }
+        free(line);
+        RIL_onUnsolicitedResponse(RIL_UNSOL_SIGNAL_STRENGTH, response, sizeof(response));
     }
 }
 
