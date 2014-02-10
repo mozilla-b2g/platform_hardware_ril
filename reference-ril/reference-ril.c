@@ -1032,6 +1032,18 @@ error:
     RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 }
 
+static int handleSignalStrength(char *line, RIL_SignalStrength_v6 *response) {
+    int num = sizeof(RIL_SignalStrength_v6) / sizeof(int);
+    int *p = (int *)response;
+
+    while (num--) {
+        if (at_tok_nextint(&line, p++) < 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
 static void requestSignalStrength(void *data __unused, size_t datalen __unused, RIL_Token t)
 {
     ATResponse *p_response = NULL;
@@ -1057,10 +1069,11 @@ static void requestSignalStrength(void *data __unused, size_t datalen __unused, 
     response.LTE_SignalStrength.rssnr = 0x7FFFFFFF;
     response.LTE_SignalStrength.cqi = 0x7FFFFFFF;
 
+    RIL_SignalStrength_v6 response;
+
     err = at_send_command_singleline("AT+CSQ", "+CSQ:", &p_response);
 
     if (err < 0 || p_response->success == 0) {
-        RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
         goto error;
     }
 
@@ -1069,10 +1082,8 @@ static void requestSignalStrength(void *data __unused, size_t datalen __unused, 
     err = at_tok_start(&line);
     if (err < 0) goto error;
 
-    for (count =0; count < numofElements; count ++) {
-        err = at_tok_nextint(&line, &(response[count]));
-        if (err < 0) goto error;
-    }
+    err = handleSignalStrength(line, &response);
+    if (err < 0) goto error;
 
     RIL_onRequestComplete(t, RIL_E_SUCCESS, (int *)&response, sizeof(response));
 
@@ -4010,6 +4021,24 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         RIL_onUnsolicitedResponse(RIL_UNSOL_CDMA_PRL_CHANGED, &version, sizeof(version));
     } else if (strStartsWith(s, "+CFUN: 0")) {
         setRadioState(RADIO_STATE_OFF);
+    } else if (strStartsWith(s, "+CSQ:")) {
+        RIL_SignalStrength_v6 response;
+        line = p = strdup(s);
+        if (!line) {
+            ALOGE("+CSQ: Unable to allocate memory");
+            return;
+        }
+        if (at_tok_start(&p) < 0) {
+            ALOGE("invalid +CSQ response: %s", s);
+            free(line);
+            return;
+        }
+        if (handleSignalStrength(p, &response) < 0) {
+            free(line);
+            return;
+        }
+        free(line);
+        RIL_onUnsolicitedResponse(RIL_UNSOL_SIGNAL_STRENGTH, &response, sizeof(response));
     }
 }
 
