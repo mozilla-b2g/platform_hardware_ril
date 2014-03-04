@@ -17,6 +17,7 @@
 
 #include <telephony/ril_cdma_sms.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
 #include <string.h>
 #include <errno.h>
@@ -32,6 +33,7 @@
 #include <getopt.h>
 #include <sys/socket.h>
 #include <cutils/sockets.h>
+#include <netutils/ifc.h>
 #include <termios.h>
 #include <sys/system_properties.h>
 #include <regex.h>
@@ -43,9 +45,6 @@
 #include <utils/Log.h>
 
 #define MAX_AT_RESPONSE 0x1000
-
-/* pathname returned from RIL_REQUEST_SETUP_DATA_CALL / RIL_REQUEST_SETUP_DEFAULT_PDP */
-#define PPP_TTY_PATH "eth0"
 
 #ifdef USE_TI_COMMANDS
 
@@ -393,6 +392,100 @@ static void requestDataCallList(void *data, size_t datalen, RIL_Token t)
     requestOrSendDataCallList(&t);
 }
 
+static void freeParsedCGCONTRDP(RIL_Data_Call_Response_v6 *response)
+{
+    response->type = NULL;
+    free(response->ifname);
+    response->ifname = NULL;
+    free(response->addresses);
+    response->addresses = NULL;
+    free(response->gateways);
+    response->gateways = NULL;
+    free(response->dnses);
+    response->dnses = NULL;
+}
+
+static int parseCGCONTRDP(char *line, RIL_Data_Call_Response_v6 *response)
+{
+    int err, bearer_id;
+    char *str, *dns1, *dns2;
+
+    err = at_tok_start(&line);
+    if (err < 0)
+        goto error;
+
+    err = at_tok_nextint(&line, &response->cid);
+    if (err < 0)
+        goto error;
+
+    // Assume no error
+    response->status = 0;
+    // Assume IP
+    response->type = "IP";
+
+    // bearer_id
+    err = at_tok_nextint(&line, &bearer_id);
+    if (err < 0)
+        goto error;
+
+    asprintf(&response->ifname, "rmnet%d", bearer_id);
+
+    // APN ignored for v5
+    err = at_tok_nextstr(&line, &str);
+    if (err < 0)
+        goto error;
+
+    // local_addr and subnet_mask
+    if (!at_tok_hasmore(&line)) {
+        return 0;
+    }
+
+    // With "AT+CGPIAF=1,1,0,1" assume "a1.a2.a3.a4/mask" for IPv4 and
+    // "a1:a2:a3:a4:a5:a6:a7:a8/mask" for IPv6.  Assume IPv4 for now.
+    err = at_tok_nextstr(&line, &str);
+    if (err < 0)
+        goto error;
+
+    response->addresses = strdup(str);
+
+    // gw
+    if (!at_tok_hasmore(&line)) {
+        return 0;
+    }
+
+    err = at_tok_nextstr(&line, &str);
+    if (err < 0)
+        goto error;
+
+    response->gateways = strdup(str);
+
+    // dns_prim
+    if (!at_tok_hasmore(&line)) {
+        return 0;
+    }
+
+    err = at_tok_nextstr(&line, &dns1);
+    if (err < 0)
+        goto error;
+
+    // dns_sec
+    if (at_tok_hasmore(&line)) {
+        err = at_tok_nextstr(&line, &dns2);
+        if (err < 0)
+            goto error;
+
+        asprintf(&response->dnses, "%s %s", dns1, dns2);
+    } else {
+        response->dnses = strdup(dns1);
+    }
+
+    return 0;
+
+error:
+    freeParsedCGCONTRDP(response);
+    return -1;
+}
+
 static void requestOrSendDataCallList(RIL_Token *t)
 {
     ATResponse *p_response;
@@ -417,6 +510,7 @@ static void requestOrSendDataCallList(RIL_Token *t)
 
     RIL_Data_Call_Response_v6 *responses =
         alloca(n * sizeof(RIL_Data_Call_Response_v6));
+    RIL_Data_Call_Response_v6 tmp_rp;
 
     int i;
     for (i = 0; i < n; i++) {
@@ -453,7 +547,7 @@ static void requestOrSendDataCallList(RIL_Token *t)
 
     at_response_free(p_response);
 
-    err = at_send_command_multiline ("AT+CGDCONT?", "+CGDCONT:", &p_response);
+    err = at_send_command_multiline ("AT+CGCONTRDP", "+CGCONTRDP:", &p_response);
     if (err != 0 || p_response->success == 0) {
         if (t != NULL)
             RIL_onRequestComplete(*t, RIL_E_GENERIC_FAILURE, NULL, 0);
@@ -465,98 +559,44 @@ static void requestOrSendDataCallList(RIL_Token *t)
 
     for (p_cur = p_response->p_intermediates; p_cur != NULL;
          p_cur = p_cur->p_next) {
-        char *line = p_cur->line;
-        int cid;
-
-        err = at_tok_start(&line);
-        if (err < 0)
-            goto error;
-
-        err = at_tok_nextint(&line, &cid);
-        if (err < 0)
+        if (parseCGCONTRDP(p_cur->line, &tmp_rp) < 0)
             goto error;
 
         for (i = 0; i < n; i++) {
-            if (responses[i].cid == cid)
+            if (responses[i].cid == tmp_rp.cid)
                 break;
         }
 
         if (i >= n) {
             /* details for a context we didn't hear about in the last request */
+            freeParsedCGCONTRDP(&tmp_rp);
             continue;
         }
 
-        // Assume no error
-        responses[i].status = 0;
+        responses[i].status = tmp_rp.status;
+        responses[i].type = tmp_rp.type;
 
-        // type
-        err = at_tok_nextstr(&line, &out);
-        if (err < 0)
-            goto error;
-        responses[i].type = alloca(strlen(out) + 1);
-        strcpy(responses[i].type, out);
+#define COPY_FIELD(f) \
+    responses[i].f = alloca(strlen(tmp_rp.f) + 1); \
+    strcpy(responses[i].f, tmp_rp.f);
 
-        // APN ignored for v5
-        err = at_tok_nextstr(&line, &out);
-        if (err < 0)
-            goto error;
+        COPY_FIELD(ifname);
 
-        responses[i].ifname = alloca(strlen(PPP_TTY_PATH) + 1);
-        strcpy(responses[i].ifname, PPP_TTY_PATH);
+        if (tmp_rp.addresses) {
+            COPY_FIELD(addresses);
 
-        err = at_tok_nextstr(&line, &out);
-        if (err < 0)
-            goto error;
+            if (tmp_rp.gateways) {
+                COPY_FIELD(gateways);
 
-        responses[i].addresses = alloca(strlen(out) + 1);
-        strcpy(responses[i].addresses, out);
-
-        {
-            char  propValue[PROP_VALUE_MAX];
-
-            if (__system_property_get("ro.kernel.qemu", propValue) != 0) {
-                /* We are in the emulator - the dns servers are listed
-                 * by the following system properties, setup in
-                 * /system/etc/init.goldfish.sh:
-                 *  - net.eth0.dns1
-                 *  - net.eth0.dns2
-                 *  - net.eth0.dns3
-                 *  - net.eth0.dns4
-                 */
-                const int   dnslist_sz = 128;
-                char*       dnslist = alloca(dnslist_sz);
-                const char* separator = "";
-                int         nn;
-
-                dnslist[0] = 0;
-                for (nn = 1; nn <= 4; nn++) {
-                    /* Probe net.eth0.dns<n> */
-                    char  propName[PROP_NAME_MAX];
-                    snprintf(propName, sizeof propName, "net.eth0.dns%d", nn);
-
-                    /* Ignore if undefined */
-                    if (__system_property_get(propName, propValue) == 0) {
-                        continue;
-                    }
-
-                    /* Append the DNS IP address */
-                    strlcat(dnslist, separator, dnslist_sz);
-                    strlcat(dnslist, propValue, dnslist_sz);
-                    separator = " ";
+                if (tmp_rp.dnses) {
+                    COPY_FIELD(dnses);
                 }
-                responses[i].dnses = dnslist;
-
-                /* There is only on gateway in the emulator */
-                responses[i].gateways = "10.0.2.2";
-            }
-            else {
-                /* I don't know where we are, so use the public Google DNS
-                 * servers by default and no gateway.
-                 */
-                responses[i].dnses = "8.8.8.8 8.8.4.4";
-                responses[i].gateways = "";
             }
         }
+
+#undef COPY_FIELD
+
+        freeParsedCGCONTRDP(&tmp_rp);
     }
 
     at_response_free(p_response);
@@ -1827,6 +1867,43 @@ error:
     at_response_free(p_response);
 }
 
+static int configureInterface(const char* ifname, const char *addr)
+{
+    char ip[16];
+    int prefixLen, ret = -1;
+
+    if (2 != sscanf(addr, "%[.0-9]/%d", ip, &prefixLen))
+        return ret;
+
+    if (ifc_init())
+        return ret;
+
+    if (!ifc_up(ifname)) {
+        if (ifc_set_addr(ifname, inet_addr(ip)) ||
+            ifc_set_prefixLength(ifname, prefixLen)) {
+            ifc_down(ifname);
+        } else {
+            ret = 0;
+        }
+    }
+
+    ifc_close();
+
+    return ret;
+}
+
+static int deconfigureInterface(const char* ifname)
+{
+    int ret;
+
+    if (ifc_init())
+        return -1;
+
+    ret = ifc_down(ifname);
+    ifc_close();
+    return ret;
+}
+
 static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
 {
     const char *apn;
@@ -1907,6 +1984,8 @@ static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
         if (qmistatus < 0) goto error;
 
     } else {
+        RIL_Data_Call_Response_v6 tmp_rp;
+        int ret;
 
         if (datalen > 6 * sizeof(char *)) {
             pdp_type = ((const char **)data)[6];
@@ -1932,11 +2011,25 @@ static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
         err = at_send_command("AT+CGACT=0,1", NULL);
 
         // Start data on PDP context 1
-        err = at_send_command("ATD*99***1#", &p_response);
+        err = at_send_command("ATD*99***1#", NULL);
 
+        // Retrieve dynamic properties & setup kernel iface
+        err = at_send_command_singleline("AT+CGCONTRDP=1", "+CGCONTRDP:", &p_response);
         if (err < 0 || p_response->success == 0) {
             goto error;
         }
+
+        if (parseCGCONTRDP(p_response->p_intermediates->line, &tmp_rp) < 0)
+            goto error;
+
+        ret = configureInterface(tmp_rp.ifname, tmp_rp.addresses);
+        if (ret < 0) {
+            deconfigureInterface(tmp_rp.ifname);
+            freeParsedCGCONTRDP(&tmp_rp);
+            goto error;
+        }
+
+        freeParsedCGCONTRDP(&tmp_rp);
     }
 
     requestOrSendDataCallList(&t);
@@ -1962,6 +2055,9 @@ static void requestDeactivateDataCall(void *data, size_t datalen, RIL_Token t)
     if (err < 0 || p_response->success == 0) {
         goto error;
     }
+
+    // TODO: Bug 821578: B2G Emulator: Support data call with multiple APN
+    deconfigureInterface("rmnet0");
 
     RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
     at_response_free(p_response);
