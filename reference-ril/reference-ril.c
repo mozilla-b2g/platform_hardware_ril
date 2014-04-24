@@ -34,6 +34,7 @@
 #include <sys/socket.h>
 #include <cutils/sockets.h>
 #include <netutils/ifc.h>
+#include <linux/rtnetlink.h>
 #include <termios.h>
 #include <sys/system_properties.h>
 #include <regex.h>
@@ -481,11 +482,6 @@ static int parseCGCONTRDP(char *line, RIL_Data_Call_Response_v6 *response)
     if (err < 0)
         goto error;
 
-    // Assume no error
-    response->status = 0;
-    // Assume IP
-    response->type = "IP";
-
     // bearer_id
     err = at_tok_nextint(&line, &bearer_id);
     if (err < 0)
@@ -558,14 +554,8 @@ static void requestOrSendDataCallList(RIL_Token *t)
     char *out;
 
     err = at_send_command_multiline ("AT+CGACT?", "+CGACT:", &p_response);
-    if (err != 0 || p_response->success == 0) {
-        if (t != NULL)
-            RIL_onRequestComplete(*t, RIL_E_GENERIC_FAILURE, NULL, 0);
-        else
-            RIL_onUnsolicitedResponse(RIL_UNSOL_DATA_CALL_LIST_CHANGED,
-                                      NULL, 0);
-        return;
-    }
+    if (err != 0 || p_response->success == 0)
+        goto error;
 
     for (p_cur = p_response->p_intermediates; p_cur != NULL;
          p_cur = p_cur->p_next)
@@ -609,16 +599,53 @@ static void requestOrSendDataCallList(RIL_Token *t)
     }
 
     at_response_free(p_response);
+    p_response = NULL;
+
+    err = at_send_command_multiline ("AT+CGDCONT?", "+CGDCONT:", &p_response);
+    if (err != 0 || p_response->success == 0)
+        goto error;
+
+    for (p_cur = p_response->p_intermediates; p_cur != NULL;
+         p_cur = p_cur->p_next) {
+        char *line = p_cur->line;
+        int cid;
+
+        err = at_tok_start(&line);
+        if (err < 0)
+            goto error;
+
+        err = at_tok_nextint(&line, &cid);
+        if (err < 0)
+            goto error;
+
+        for (i = 0; i < n; i++) {
+            if (responses[i].cid == cid)
+                break;
+        }
+
+        if (i >= n) {
+            /* details for a context we didn't hear about in the last request */
+            continue;
+        }
+
+        // type
+        err = at_tok_nextstr(&line, &out);
+        if (err < 0)
+            goto error;
+
+        if (!strcmp(out, "IP")) {
+            responses[i].type = "IP";
+        } else {
+            responses[i].type = "IPV6";
+        }
+    }
+
+    at_response_free(p_response);
+    p_response = NULL;
 
     err = at_send_command_multiline ("AT+CGCONTRDP", "+CGCONTRDP:", &p_response);
-    if (err != 0 || p_response->success == 0) {
-        if (t != NULL)
-            RIL_onRequestComplete(*t, RIL_E_GENERIC_FAILURE, NULL, 0);
-        else
-            RIL_onUnsolicitedResponse(RIL_UNSOL_DATA_CALL_LIST_CHANGED,
-                                      NULL, 0);
-        return;
-    }
+    if (err != 0 || p_response->success == 0)
+        goto error;
 
     for (p_cur = p_response->p_intermediates; p_cur != NULL;
          p_cur = p_cur->p_next) {
@@ -636,8 +663,8 @@ static void requestOrSendDataCallList(RIL_Token *t)
             continue;
         }
 
-        responses[i].status = tmp_rp.status;
-        responses[i].type = tmp_rp.type;
+        // Assume no error
+        responses[i].status = 0;
 
 #define COPY_FIELD(f) \
     responses[i].f = alloca(strlen(tmp_rp.f) + 1); \
@@ -1964,39 +1991,38 @@ error:
 
 static int configureInterface(const char* ifname, const char *addr)
 {
-    char ip[16];
+    char ip[INET6_ADDRSTRLEN];
     int prefixLen, ret = -1;
 
-    if (2 != sscanf(addr, "%[.0-9]/%d", ip, &prefixLen))
+    ALOGD("%s: ifname=%s, addr=%s", __FUNCTION__, ifname, addr);
+    if (2 != sscanf(addr, "%[.:0-9a-f]/%d", ip, &prefixLen)) {
+        ALOGE("%s: failed to parse address", __FUNCTION__);
         return ret;
-
-    if (ifc_init())
-        return ret;
-
-    if (!ifc_up(ifname)) {
-        if (ifc_set_addr(ifname, inet_addr(ip)) ||
-            ifc_set_prefixLength(ifname, prefixLen)) {
-            ifc_down(ifname);
-        } else {
-            ret = 0;
-        }
     }
 
-    ifc_close();
+    ret = ifc_act_on_address(RTM_NEWADDR, ifname, ip, prefixLen);
+    if (ret < 0) {
+        ALOGE("%s: ifc_act_on_address returns %d", __FUNCTION__, ret);
+        return ret;
+    }
 
-    return ret;
+    ret = ifc_enable(ifname);
+    if (ret < 0) {
+        ALOGE("%s: ifc_enable returns %d", __FUNCTION__, ret);
+        ifc_clear_addresses(ifname);
+        return ret;
+    }
+
+    return 0;
 }
 
-static int deconfigureInterface(const char* ifname)
+static void deconfigureInterface(const char* ifname)
 {
-    int ret;
-
-    if (ifc_init())
-        return -1;
-
-    ret = ifc_down(ifname);
+    ifc_init();
+    ifc_down(ifname);
     ifc_close();
-    return ret;
+
+    ifc_clear_addresses(ifname);
 }
 
 static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
