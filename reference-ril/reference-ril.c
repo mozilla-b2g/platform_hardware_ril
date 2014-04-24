@@ -34,6 +34,7 @@
 #include <sys/socket.h>
 #include <cutils/sockets.h>
 #include <netutils/ifc.h>
+#include <linux/rtnetlink.h>
 #include <termios.h>
 #include <sys/system_properties.h>
 #include <regex.h>
@@ -455,98 +456,124 @@ static void requestDataCallList(void *data, size_t datalen, RIL_Token t)
     requestOrSendDataCallList(&t);
 }
 
-static void freeParsedCGCONTRDP(RIL_Data_Call_Response_v6 *response)
+static void freeParsedCGCONTRDP(RIL_Data_Call_Response_v6 *responses,
+                                const size_t n_responses)
 {
-    response->type = NULL;
-    free(response->ifname);
-    response->ifname = NULL;
-    free(response->addresses);
-    response->addresses = NULL;
-    free(response->gateways);
-    response->gateways = NULL;
-    free(response->dnses);
-    response->dnses = NULL;
+    size_t i;
+
+    for (i = 0; i < n_responses; i++) {
+        RIL_Data_Call_Response_v6 *response = &responses[i];
+
+        response->type = NULL;
+        free(response->ifname);
+        response->ifname = NULL;
+        free(response->addresses);
+        response->addresses = NULL;
+        free(response->gateways);
+        response->gateways = NULL;
+        free(response->dnses);
+        response->dnses = NULL;
+    }
 }
 
-static int parseCGCONTRDP(char *line, RIL_Data_Call_Response_v6 *response)
+static void concatAddress(char **str1, const char *str2)
 {
-    int err, bearer_id;
-    char *str, *dns1, *dns2;
+    char *result = NULL;
 
-    err = at_tok_start(&line);
-    if (err < 0)
-        goto error;
-
-    err = at_tok_nextint(&line, &response->cid);
-    if (err < 0)
-        goto error;
-
-    // Assume no error
-    response->status = 0;
-    // Assume IP
-    response->type = "IP";
-
-    // bearer_id
-    err = at_tok_nextint(&line, &bearer_id);
-    if (err < 0)
-        goto error;
-
-    asprintf(&response->ifname, "rmnet%d", bearer_id);
-
-    // APN ignored for v5
-    err = at_tok_nextstr(&line, &str);
-    if (err < 0)
-        goto error;
-
-    // local_addr and subnet_mask
-    if (!at_tok_hasmore(&line)) {
-        return 0;
-    }
-
-    // With "AT+CGPIAF=1,1,0,1" assume "a1.a2.a3.a4/mask" for IPv4 and
-    // "a1:a2:a3:a4:a5:a6:a7:a8/mask" for IPv6.  Assume IPv4 for now.
-    err = at_tok_nextstr(&line, &str);
-    if (err < 0)
-        goto error;
-
-    response->addresses = strdup(str);
-
-    // gw
-    if (!at_tok_hasmore(&line)) {
-        return 0;
-    }
-
-    err = at_tok_nextstr(&line, &str);
-    if (err < 0)
-        goto error;
-
-    response->gateways = strdup(str);
-
-    // dns_prim
-    if (!at_tok_hasmore(&line)) {
-        return 0;
-    }
-
-    err = at_tok_nextstr(&line, &dns1);
-    if (err < 0)
-        goto error;
-
-    // dns_sec
-    if (at_tok_hasmore(&line)) {
-        err = at_tok_nextstr(&line, &dns2);
-        if (err < 0)
-            goto error;
-
-        asprintf(&response->dnses, "%s %s", dns1, dns2);
+    if (*str1) {
+        asprintf(&result, "%s %s", *str1, str2);
+        free(*str1);
     } else {
-        response->dnses = strdup(dns1);
+        result = strdup(str2);
     }
 
-    return 0;
+    *str1 = result;
+}
 
-error:
-    freeParsedCGCONTRDP(response);
-    return -1;
+static int parseCGCONTRDP(ATLine *p_cur, RIL_Data_Call_Response_v6 *responses,
+                          const size_t n_responses)
+{
+    int success = 0;
+
+    for (; p_cur != NULL; p_cur = p_cur->p_next) {
+        char *line, *apn, *addr, *gw, *dns1, *dns2;
+        int err, cid, bearer_id;
+        size_t i;
+        RIL_Data_Call_Response_v6 *response;
+
+        line = p_cur->line;
+        bearer_id = -1;
+        apn = addr = gw = dns1 = dns2 = NULL;
+        response = NULL;
+
+        err = at_tok_start(&line);
+        if (err < 0) continue;
+
+        err = at_tok_nextint(&line, &cid);
+        if (err < 0) continue;
+
+        for (i = 0; i < n_responses; i++) {
+            if (responses[i].cid == cid) {
+                response = &responses[i];
+                break;
+            }
+        }
+        if (!response) {
+            ALOGE("%s: cid invalid", __FUNCTION__);
+            continue;
+        }
+
+        do {
+            // bearer_id
+            err = at_tok_nextint(&line, &bearer_id);
+            if (err < 0) break;
+
+            // Ignore APN
+            err = at_tok_nextstr(&line, &apn);
+            if (err < 0) break;
+
+#define EXTRACT_FIELD(ptr) \
+    if (!at_tok_hasmore(&line) || \
+        (err = at_tok_nextstr(&line, &ptr)) < 0) { \
+        break; \
+    }
+
+            // local_addr and subnet_mask
+            //
+            // With "AT+CGPIAF=1,1,0,1" assume "a1.a2.a3.a4/mask" for IPv4 and
+            // "a1:a2:a3:a4:a5:a6:a7:a8/mask" for IPv6.
+            EXTRACT_FIELD(addr);
+
+            EXTRACT_FIELD(gw);
+            EXTRACT_FIELD(dns1);
+            EXTRACT_FIELD(dns2);
+        } while (0);
+
+        if (err < 0) {
+            ALOGE("%s: err %d, skip", __FUNCTION__, err);
+            continue;
+        }
+
+        if (response->ifname) {
+            if ((response->ifname[5] - '0') != bearer_id) {
+                ALOGE("%s: bearer_id mismatch, was %d", __FUNCTION__,
+                      response->ifname[5] - '0');
+                continue;
+            }
+        } else {
+            asprintf(&response->ifname, "rmnet%d", bearer_id);
+        }
+
+        if (addr) concatAddress(&(response->addresses), addr);
+        if (gw) concatAddress(&(response->gateways), gw);
+        if (dns1) concatAddress(&(response->dnses), dns1);
+        if (dns2) concatAddress(&(response->dnses), dns2);
+
+        response->status = 0;
+        ++success;
+    }
+
+    return success;
 }
 
 static void requestOrSendDataCallList(RIL_Token *t)
@@ -558,14 +585,8 @@ static void requestOrSendDataCallList(RIL_Token *t)
     char *out;
 
     err = at_send_command_multiline ("AT+CGACT?", "+CGACT:", &p_response);
-    if (err != 0 || p_response->success == 0) {
-        if (t != NULL)
-            RIL_onRequestComplete(*t, RIL_E_GENERIC_FAILURE, NULL, 0);
-        else
-            RIL_onUnsolicitedResponse(RIL_UNSOL_DATA_CALL_LIST_CHANGED,
-                                      NULL, 0);
-        return;
-    }
+    if (err != 0 || p_response->success == 0)
+        goto error;
 
     for (p_cur = p_response->p_intermediates; p_cur != NULL;
          p_cur = p_cur->p_next)
@@ -582,10 +603,10 @@ static void requestOrSendDataCallList(RIL_Token *t)
         responses[i].cid = -1;
         responses[i].active = -1;
         responses[i].type = "";
-        responses[i].ifname = "";
-        responses[i].addresses = "";
-        responses[i].dnses = "";
-        responses[i].gateways = "";
+        responses[i].ifname = NULL;
+        responses[i].addresses = NULL;
+        responses[i].dnses = NULL;
+        responses[i].gateways = NULL;
     }
 
     RIL_Data_Call_Response_v6 *response = responses;
@@ -609,58 +630,56 @@ static void requestOrSendDataCallList(RIL_Token *t)
     }
 
     at_response_free(p_response);
+    p_response = NULL;
 
-    err = at_send_command_multiline ("AT+CGCONTRDP", "+CGCONTRDP:", &p_response);
-    if (err != 0 || p_response->success == 0) {
-        if (t != NULL)
-            RIL_onRequestComplete(*t, RIL_E_GENERIC_FAILURE, NULL, 0);
-        else
-            RIL_onUnsolicitedResponse(RIL_UNSOL_DATA_CALL_LIST_CHANGED,
-                                      NULL, 0);
-        return;
-    }
+    err = at_send_command_multiline ("AT+CGDCONT?", "+CGDCONT:", &p_response);
+    if (err != 0 || p_response->success == 0)
+        goto error;
 
     for (p_cur = p_response->p_intermediates; p_cur != NULL;
          p_cur = p_cur->p_next) {
-        if (parseCGCONTRDP(p_cur->line, &tmp_rp) < 0)
+        char *line = p_cur->line;
+        int cid;
+
+        err = at_tok_start(&line);
+        if (err < 0)
+            goto error;
+
+        err = at_tok_nextint(&line, &cid);
+        if (err < 0)
             goto error;
 
         for (i = 0; i < n; i++) {
-            if (responses[i].cid == tmp_rp.cid)
+            if (responses[i].cid == cid)
                 break;
         }
 
         if (i >= n) {
             /* details for a context we didn't hear about in the last request */
-            freeParsedCGCONTRDP(&tmp_rp);
             continue;
         }
 
-        responses[i].status = tmp_rp.status;
-        responses[i].type = tmp_rp.type;
+        // type
+        err = at_tok_nextstr(&line, &out);
+        if (err < 0)
+            goto error;
 
-#define COPY_FIELD(f) \
-    responses[i].f = alloca(strlen(tmp_rp.f) + 1); \
-    strcpy(responses[i].f, tmp_rp.f);
-
-        COPY_FIELD(ifname);
-
-        if (tmp_rp.addresses) {
-            COPY_FIELD(addresses);
-
-            if (tmp_rp.gateways) {
-                COPY_FIELD(gateways);
-
-                if (tmp_rp.dnses) {
-                    COPY_FIELD(dnses);
-                }
-            }
+        if (!strcmp(out, "IP")) {
+            responses[i].type = "IP";
+        } else {
+            responses[i].type = "IPV6";
         }
-
-#undef COPY_FIELD
-
-        freeParsedCGCONTRDP(&tmp_rp);
     }
+
+    at_response_free(p_response);
+    p_response = NULL;
+
+    err = at_send_command_multiline ("AT+CGCONTRDP", "+CGCONTRDP:", &p_response);
+    if (err != 0 || p_response->success == 0)
+        goto error;
+
+    if (!parseCGCONTRDP(p_response->p_intermediates, responses, n))
+        goto error;
 
     at_response_free(p_response);
 
@@ -672,6 +691,7 @@ static void requestOrSendDataCallList(RIL_Token *t)
                                   responses,
                                   n * sizeof(RIL_Data_Call_Response_v6));
 
+    freeParsedCGCONTRDP(responses, n);
     return;
 
 error:
@@ -1964,39 +1984,48 @@ error:
 
 static int configureInterface(const char* ifname, const char *addr)
 {
-    char ip[16];
-    int prefixLen, ret = -1;
+    char ip[INET6_ADDRSTRLEN];
+    int prefixLen, len, ret = -1;
 
-    if (2 != sscanf(addr, "%[.0-9]/%d", ip, &prefixLen))
-        return ret;
-
-    if (ifc_init())
-        return ret;
-
-    if (!ifc_up(ifname)) {
-        if (ifc_set_addr(ifname, inet_addr(ip)) ||
-            ifc_set_prefixLength(ifname, prefixLen)) {
-            ifc_down(ifname);
-        } else {
-            ret = 0;
+    ALOGD("%s: ifname=%s, addr=%s", __FUNCTION__, ifname, addr);
+    do {
+        if (2 != sscanf(addr, "%[.:0-9a-f]/%d%n", ip, &prefixLen, &len)) {
+            ALOGE("%s: failed to parse address", __FUNCTION__);
+            ret = -1;
+            break;
         }
+
+        ret = ifc_act_on_address(RTM_NEWADDR, ifname, ip, prefixLen);
+        if (ret < 0) {
+            ALOGE("%s: ifc_act_on_address returns %d", __FUNCTION__, ret);
+            break;
+        }
+
+        addr += len;
+        while (*addr != '\0' && isspace(*addr)) {
+            addr++;
+        }
+    } while(*addr);
+
+    if (!ret) {
+        ret = ifc_enable(ifname);
+    }
+    if (ret < 0) {
+        ALOGE("%s: ifc_enable returns %d", __FUNCTION__, ret);
+        ifc_clear_addresses(ifname);
+        return ret;
     }
 
-    ifc_close();
-
-    return ret;
+    return 0;
 }
 
-static int deconfigureInterface(const char* ifname)
+static void deconfigureInterface(const char* ifname)
 {
-    int ret;
-
-    if (ifc_init())
-        return -1;
-
-    ret = ifc_down(ifname);
+    ifc_init();
+    ifc_down(ifname);
     ifc_close();
-    return ret;
+
+    ifc_clear_addresses(ifname);
 }
 
 static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
@@ -2109,22 +2138,25 @@ static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
         err = at_send_command("ATD*99***1#", NULL);
 
         // Retrieve dynamic properties & setup kernel iface
-        err = at_send_command_singleline("AT+CGCONTRDP=1", "+CGCONTRDP:", &p_response);
+        err = at_send_command_multiline("AT+CGCONTRDP=1", "+CGCONTRDP:", &p_response);
         if (err < 0 || p_response->success == 0) {
             goto error;
         }
 
-        if (parseCGCONTRDP(p_response->p_intermediates->line, &tmp_rp) < 0)
+        memset(&tmp_rp, 0, sizeof tmp_rp);
+        // TODO: Bug 821578: B2G Emulator: Support data call with multiple APN
+        tmp_rp.cid = 1;
+        if (!parseCGCONTRDP(p_response->p_intermediates, &tmp_rp, 1))
             goto error;
 
         ret = configureInterface(tmp_rp.ifname, tmp_rp.addresses);
         if (ret < 0) {
             deconfigureInterface(tmp_rp.ifname);
-            freeParsedCGCONTRDP(&tmp_rp);
+            freeParsedCGCONTRDP(&tmp_rp, 1);
             goto error;
         }
 
-        freeParsedCGCONTRDP(&tmp_rp);
+        freeParsedCGCONTRDP(&tmp_rp, 1);
     }
 
     requestOrSendDataCallList(&t);
