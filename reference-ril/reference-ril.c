@@ -1544,7 +1544,7 @@ static void requestRegistrationState(int request, void *data,
     char *line;
     int i = 0, j, numElements = 0;
     int count = 3;
-    int type, startfrom;
+    int type;
 
     ALOGD("requestRegistrationState");
     if (request == RIL_REQUEST_VOICE_REGISTRATION_STATE) {
@@ -1579,7 +1579,6 @@ static void requestRegistrationState(int request, void *data,
     if (is3gpp2(type) == 1) {
         ALOGD("registration state type: 3GPP2");
         // TODO: Query modem
-        startfrom = 3;
         if(request == RIL_REQUEST_VOICE_REGISTRATION_STATE) {
             asprintf(&responseStr[3], "8");     // EvDo revA
             asprintf(&responseStr[4], "1");     // BSID
@@ -1598,9 +1597,10 @@ static void requestRegistrationState(int request, void *data,
       }
     } else { // type == RADIO_TECH_3GPP
         ALOGD("registration state type: 3GPP");
-        startfrom = 0;
-        asprintf(&responseStr[1], "%x", registration[1]);
-        asprintf(&responseStr[2], "%x", registration[2]);
+        if (registration[1] >= 0)
+            asprintf(&responseStr[1], "%x", registration[1]);
+        if (registration[2] >= 0)
+            asprintf(&responseStr[2], "%x", registration[2]);
         if (count > 3)
             asprintf(&responseStr[3], "%d", registration[3]);
     }
@@ -1616,23 +1616,14 @@ static void requestRegistrationState(int request, void *data,
         // asprintf(&responseStr[5], "1");
     }
 
-    for (j = startfrom; j < numElements; j++) {
-        if (!responseStr[i]) goto error;
-    }
-    free(registration);
-    registration = NULL;
-
     RIL_onRequestComplete(t, RIL_E_SUCCESS, responseStr, numElements*sizeof(responseStr));
-    for (j = 0; j < numElements; j++ ) {
-        free(responseStr[j]);
-        responseStr[j] = NULL;
-    }
-    free(responseStr);
-    responseStr = NULL;
-    at_response_free(p_response);
+    goto done;
 
-    return;
 error:
+    ALOGE("requestRegistrationState must never return an error when radio is on");
+    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+
+done:
     if (responseStr) {
         for (j = 0; j < numElements; j++) {
             free(responseStr[j]);
@@ -1641,8 +1632,10 @@ error:
         free(responseStr);
         responseStr = NULL;
     }
-    ALOGE("requestRegistrationState must never return an error when radio is on");
-    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+    if (registration) {
+        free(registration);
+        registration = NULL;
+    }
     at_response_free(p_response);
 }
 
