@@ -4432,6 +4432,44 @@ static void sendUnsolImsNetworkStateChanged()
             NULL, 0);
 }
 
+static void handleUnsolicitedUssd(const char *s)
+{
+    char *line = NULL;
+    char *p = NULL;
+    char *responseStr[2] = {NULL, NULL};
+    int type = 0;
+    const int count = 2;
+    int i = 0;
+
+    // Query facility lock. AT+MCUSD=<type>[,<message_str>]
+    line = p = strdup(s);
+    if (at_tok_start(&p) < 0) {
+        RLOGE("invalid +MCUSD response: %s", line);
+        goto error;
+    }
+
+    if (at_tok_nextint(&p, &type) < 0) {
+        RLOGE("invalid +MCUSD response: %s", line);
+        goto error;
+    }
+    asprintf(&responseStr[0], "%d", type);
+
+    if (at_tok_hasmore(&p) &&
+        at_tok_nextstr(&p, &responseStr[1]) < 0) {
+        RLOGE("invalid +MCUSD response: %s", line);
+        goto error;
+    }
+
+    RIL_onUnsolicitedResponse(RIL_UNSOL_ON_USSD, responseStr, count * sizeof(char*));
+
+error:
+    // We allocate the memory of responseStr[0], so need to free it here.
+    if (responseStr[0]) {
+        free(responseStr[0]);
+    }
+    free(line);
+}
+
 /**
  * Called by atchannel when an unsolicited line appears
  * This is called on atchannel's reader thread. AT commands may
@@ -4712,6 +4750,8 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         sCnapInfo.CNI_validity = namePresentation;
 
         free(line);
+    } else if (strStartsWith(s, "+MCUSD:")) {
+        handleUnsolicitedUssd(s);
     }
 }
 
