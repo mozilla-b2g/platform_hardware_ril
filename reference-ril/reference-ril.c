@@ -259,6 +259,8 @@ static int s_cid = 0;
  */
 #define  A_MAX_CALL_CONNECTIONS  7
 
+static int s_maxDataContexts = 0;
+
 typedef struct {
     char name[ A_CALL_NAME_MAX_SIZE+1 ];
     int CNI_validity;
@@ -525,6 +527,7 @@ static int parseCGCONTRDP(char *line, RIL_Data_Call_Response_v6 *response)
 
     // Assume no error
     response->status = 0;
+    response->active = 2;
     // Assume IP
     response->type = "IP";
 
@@ -2137,6 +2140,71 @@ static int deconfigureInterface(const char* ifname)
     return ret;
 }
 
+static int findFreeCid()
+{
+    ATResponse *p_response = NULL;
+    ATLine *p_cur;
+
+    int err, new_cid = -1;
+    int dataStates[s_maxDataContexts];
+    memset( dataStates, 0, s_maxDataContexts * sizeof(int) );
+
+    // Query current active pdp contexts.
+    err = at_send_command_multiline ("AT+CGACT?", "+CGACT:", &p_response);
+    if (err != 0 || p_response->success == 0) {
+        goto error;
+    }
+
+    for (p_cur = p_response->p_intermediates; p_cur != NULL;
+         p_cur = p_cur->p_next) {
+        char *line = p_cur->line;
+        int cid, state;
+
+        err = at_tok_start(&line);
+        if (err < 0)
+            goto error;
+
+        err = at_tok_nextint(&line, &cid);
+        if (err < 0)
+            goto error;
+
+        err = at_tok_nextint(&line, &state);
+        if (err < 0)
+            goto error;
+
+        // Found an inactive slot, just reuse cid.
+        if (!state) {
+            new_cid = cid;
+            break;
+        }
+
+        // Error, cid exceeds range of supported PDP contexts.
+        if (cid > s_maxDataContexts) {
+            continue;
+        }
+
+        dataStates[cid - 1] = state;
+    }
+    at_response_free(p_response);
+
+    if (new_cid > -1) {
+        return new_cid;
+    }
+
+    int i;
+    for (i = 0; i < s_maxDataContexts; i++) {
+        if (dataStates[i] == 0) {
+            return i + 1;
+        }
+    }
+
+    return -1;
+
+error:
+    at_response_free(p_response);
+    return -1;
+}
+
 static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
 {
     const char *apn;
@@ -2218,7 +2286,7 @@ static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
 
     } else {
         RIL_Data_Call_Response_v6 tmp_rp;
-        int ret;
+        int ret, cid;
 
         if (datalen > 6 * sizeof(char *)) {
             pdp_type = ((const char **)data)[6];
@@ -2226,28 +2294,44 @@ static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
             pdp_type = "IP";
         }
 
-        asprintf(&cmd, "AT+CGDCONT=1,\"%s\",\"%s\",,0,0", pdp_type, apn);
+        cid = findFreeCid();
+        if (cid < 0) {
+            ALOGE("error: no free cid found.");
+            goto error;
+        }
+
+        asprintf(&cmd, "AT+CGDCONT=%d,\"%s\",\"%s\",,0,0", cid, pdp_type, apn);
         //FIXME check for error here
         err = at_send_command(cmd, NULL);
         free(cmd);
 
         // Set required QoS params to default
-        err = at_send_command("AT+CGQREQ=1", NULL);
+        asprintf(&cmd, "AT+CGQREQ=%d", cid);
+        err = at_send_command(cmd, NULL);
+        free(cmd);
 
         // Set minimum QoS params to default
-        err = at_send_command("AT+CGQMIN=1", NULL);
+        asprintf(&cmd, "AT+CGQMIN=%d", cid);
+        err = at_send_command(cmd, NULL);
+        free(cmd);
 
         // packet-domain event reporting
         err = at_send_command("AT+CGEREP=1,0", NULL);
 
         // Hangup anything that's happening there now
-        err = at_send_command("AT+CGACT=0,1", NULL);
+        asprintf(&cmd, "AT+CGACT=0,%d", cid);
+        err = at_send_command(cmd, NULL);
+        free(cmd);
 
         // Start data on PDP context 1
-        err = at_send_command("ATD*99***1#", NULL);
+        asprintf(&cmd, "ATD*99***%d#", cid);
+        err = at_send_command(cmd, NULL);
+        free(cmd);
 
         // Retrieve dynamic properties & setup kernel iface
-        err = at_send_command_singleline("AT+CGCONTRDP=1", "+CGCONTRDP:", &p_response);
+        asprintf(&cmd, "AT+CGCONTRDP=%d", cid);
+        err = at_send_command_singleline(cmd, "+CGCONTRDP:", &p_response);
+        free(cmd);
         if (err < 0 || p_response->success == 0) {
             goto error;
         }
@@ -2262,7 +2346,12 @@ static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
             goto error;
         }
 
+        RIL_onRequestComplete(t, RIL_E_SUCCESS, &tmp_rp, sizeof(tmp_rp));
+
         freeParsedCGCONTRDP(&tmp_rp);
+        at_response_free(p_response);
+
+        return;
     }
 
     requestOrSendDataCallList(&t);
@@ -2279,8 +2368,8 @@ error:
 static void requestDeactivateDataCall(void *data, size_t datalen, RIL_Token t)
 {
     ATResponse *p_response = NULL;
-    int err;
-    char *cmd, *cid;
+    int err, id;
+    char *cmd, *cid, *ifname;
 
     cid = ((char **)data)[0];
     asprintf(&cmd, "AT+CGACT=0,%s", cid);
@@ -2288,9 +2377,20 @@ static void requestDeactivateDataCall(void *data, size_t datalen, RIL_Token t)
     if (err < 0 || p_response->success == 0) {
         goto error;
     }
+    free(cmd);
 
-    // TODO: Bug 821578: B2G Emulator: Support data call with multiple APN
-    deconfigureInterface("rmnet0");
+    // +CGDCONT=<cid> causes the values for context number <cid> to become
+    // undefined.
+    asprintf(&cmd, "AT+CGDCONT=%s", cid);
+    err = at_send_command(cmd, &p_response);
+    if (err < 0 || p_response->success == 0) {
+        goto error;
+    }
+
+    id = atoi(cid) - 1;
+    asprintf(&ifname, "rmnet%d", id);
+    deconfigureInterface(ifname);
+    free(ifname);
 
     RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
     at_response_free(p_response);
@@ -3807,6 +3907,48 @@ static void probeForModemMode(ModemInfo *info)
     RLOGI("Found GSM Modem");
 }
 
+static void queryNumOfDataContexts()
+{
+    ATResponse *p_response;
+    ATLine *p_cur;
+    int err;
+
+    // +CGDCONT=? is used to query the ranges of supported PDP Contexts.
+    err = at_send_command_multiline("AT+CGDCONT=?", "+CGDCONT:", &p_response);
+    if (err < 0 || p_response->success == 0) {
+        goto error;
+    }
+
+    for (p_cur = p_response->p_intermediates; p_cur != NULL;
+         p_cur = p_cur->p_next) {
+        char *line = p_cur->line;
+        char *range;
+        int start, end;
+
+        err = at_tok_start(&line);
+        if (err < 0)
+            goto error;
+
+        err = at_tok_nextstr(&line, &range);
+        if (err < 0)
+            goto error;
+
+        sscanf(range, "(%d-%d)", &start, &end);
+        // Assign to s_maxDataContexts the maximum range found.
+        if (end > s_maxDataContexts) {
+            s_maxDataContexts = end;
+        }
+    }
+    ALOGI("Number of data contexts: %d", s_maxDataContexts);
+
+    at_response_free(p_response);
+    return;
+
+error:
+    ALOGE("Error getting number of data contexts.");
+    at_response_free(p_response);
+}
+
 /**
  * Initialize everything that can be configured while we're still in
  * AT+CFUN=0
@@ -3821,6 +3963,9 @@ static void initializeCallback(void *param __unused)
     at_handshake();
 
     probeForModemMode(sMdmInfo);
+
+    queryNumOfDataContexts();
+
     /* note: we don't check errors here. Everything important will
        be handled in onATTimeout and onATReaderClosed */
 
