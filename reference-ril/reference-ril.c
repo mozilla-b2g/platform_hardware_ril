@@ -278,6 +278,21 @@ static int query_ctec(ModemInfo *mdm, int *current, int32_t *preferred);
 static int parse_technology_response(const char *response, int *current, int32_t *preferred);
 static int techFromModemType(int mdmtype);
 
+static int cmeErrorToRilError(int cmeError) {
+    switch (cmeError) {
+        case CME_SUCCESS:
+            return RIL_E_SUCCESS;
+        case CME_OPERATION_NOT_SUPPORTED:
+            return RIL_E_REQUEST_NOT_SUPPORTED;
+        case CME_SIM_NOT_INSERTED:
+            return RIL_E_SIM_ABSENT;
+        case CME_INCORRECT_PASSWORD:
+            return RIL_E_PASSWORD_INCORRECT;
+    }
+
+    return RIL_E_GENERIC_FAILURE;
+}
+
 static int clccStateToRILState(int state, RIL_CallState *p_state)
 
 {
@@ -2933,6 +2948,65 @@ done:
     at_response_free(p_response);
 }
 
+static void requestQueryFacilityLock(void* data, size_t datalen, RIL_Token t)
+{
+    ATResponse   *p_response = NULL;
+    ATLine       *p_cur;
+    int           err;
+    char*         cmd = NULL;
+    const char**  strings = (const char**)data;
+    int           serviceClass = 0;
+
+    // Query facility lock. AT+CLCK=<fac>,<mode>[,<password>[,<class>]]
+    asprintf(&cmd, "AT+CLCK=\"%s\",2,\"%s\",%d", strings[0], strings[1], atoi(strings[2]));
+    err = at_send_command_multiline(cmd, "+CLCK:", &p_response);
+    free(cmd);
+
+    if (err < 0 || p_response->success == 0) {
+        goto error;
+    }
+
+    // Parse the AT command result. +CLCK: <status>[,<class>]
+    for (p_cur = p_response->p_intermediates; p_cur != NULL;
+         p_cur = p_cur->p_next) {
+        char *line = p_cur->line;
+        int status;
+        int class;
+
+        err = at_tok_start(&line);
+        if (err < 0) {
+            goto error;
+        }
+
+        // Get <status>
+        if (at_tok_nextint(&line, &status) < 0) {
+            goto error;
+        }
+
+        if (!at_tok_hasmore(&line)) {
+            continue;
+        }
+
+        // Get <class>
+        if (at_tok_nextint(&line, &class) < 0) {
+            goto error;
+        }
+
+        if (status == 1) {
+            serviceClass |= class;
+        }
+    }
+
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, &serviceClass, sizeof(serviceClass));
+    goto done;
+
+error:
+    RIL_onRequestComplete(t, cmeErrorToRilError(at_get_cme_error(p_response)), NULL, 0);
+
+done:
+    at_response_free(p_response);
+}
+
 /*** Callback methods from the RIL library to us ***/
 
 /**
@@ -3458,6 +3532,10 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
 
         case RIL_REQUEST_SET_CALL_FORWARD:
             requestSetCallForward(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_QUERY_FACILITY_LOCK:
+            requestQueryFacilityLock(data, datalen, t);
             break;
 
         default:
