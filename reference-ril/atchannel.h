@@ -112,7 +112,9 @@ void at_response_free(ATResponse *p_response);
 typedef enum {
     CME_ERROR_NON_CME = -1,
     CME_SUCCESS = 0,
+    CME_OPERATION_NOT_SUPPORTED = 4,
     CME_SIM_NOT_INSERTED = 10,
+    CME_INCORRECT_PASSWORD = 16,
     CME_NO_NETWORK_SERVICE = 30
 } AT_CME_Error;
 
