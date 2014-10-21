@@ -2436,10 +2436,60 @@ error:
 
 }
 
+static int getCardLockRetryCount(char* lockType, int32_t* retryCount,
+                                 int32_t* defaultRetryCount)
+{
+    ATResponse* p_response = NULL;
+    int         err;
+    char*       cmd = NULL;
+    char*       line = NULL;
+    char*       type = NULL;
+    int         ret = CME_SUCCESS;
+
+    // Initialize the retryCount;
+    *retryCount = -1;
+    *defaultRetryCount = -1;
+
+    asprintf(&cmd, "AT+CPINR=%s", lockType);
+    err = at_send_command_singleline(cmd, "+CPINR:", &p_response);
+    free(cmd);
+
+    if (err < 0 || p_response->success == 0) {
+        ret = at_get_cme_error(p_response);
+        goto done;
+    }
+
+    line = p_response->p_intermediates->line;
+
+    // Parse the AT command result
+    // +CPINR: <code>,<retries>[,<default_retries>]
+    err = at_tok_start(&line);
+    if (err < 0) {
+        goto done;
+    }
+
+    err = at_tok_nextstr(&line, &type);
+    if (err < 0) {
+        goto done;
+    }
+
+    err = at_tok_nextint(&line, retryCount);
+    if (err < 0) {
+        goto done;
+    }
+
+    if (at_tok_hasmore(&line)) {
+        at_tok_nextint(&line, defaultRetryCount);
+    }
+
+done:
+    at_response_free(p_response);
+    return ret;
+}
+
 static void  requestEnterSimPin(void*  data, size_t  datalen, RIL_Token  t)
 {
     ATResponse   *p_response = NULL;
-    int           retries = -1;
     int           err;
     char*         cmd = NULL;
     const char**  strings = (const char**)data;;
@@ -2448,51 +2498,24 @@ static void  requestEnterSimPin(void*  data, size_t  datalen, RIL_Token  t)
         asprintf(&cmd, "AT+CPIN=%s", strings[0]);
     } else if ( datalen == 3*sizeof(char*) ) {
         asprintf(&cmd, "AT+CPIN=%s,%s", strings[0], strings[1]);
-    } else
-        goto error;
+    } else {
+        int retries = -1;
+        RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, &retries, sizeof(int));
+        return;
+    }
 
     err = at_send_command_singleline(cmd, "+CPIN:", &p_response);
     free(cmd);
 
     if (err < 0 || p_response->success == 0) {
-        at_response_free(p_response);
-
-        // Get remaining PIN retries
-        char* line = NULL;
-        char* type = NULL;
-
-        asprintf(&cmd, "AT+CPINR=SIM PIN");
-        err = at_send_command_singleline(cmd, "+CPINR:", &p_response);
-        free(cmd);
-
-        if (err < 0 || p_response->success == 0) {
-            goto error;
-        }
-
-        line = p_response->p_intermediates->line;
-        err = at_tok_start(&line);
-
-        if (err < 0) {
-            goto error;
-        }
-
-        err = at_tok_nextstr(&line, &type);
-
-        if (err < 0) {
-            goto error;
-        }
-
-        err = at_tok_nextint(&line, &retries);
-
-        if (err < 0) {
-            retries = -1;
-        }
-error:
-        RIL_onRequestComplete(t, RIL_E_PASSWORD_INCORRECT, &retries, sizeof(int));
+        int retries[2] = {-1, -1};
+        getCardLockRetryCount("SIM PIN", retries+0, retries+1);
+        RIL_onRequestComplete(t, RIL_E_PASSWORD_INCORRECT, &retries[0], sizeof(int));
     } else {
-        retries = 0;
+        int retries = 0;
         RIL_onRequestComplete(t, RIL_E_SUCCESS, &retries, sizeof(int));
     }
+
     at_response_free(p_response);
 }
 
@@ -2576,55 +2599,22 @@ static void requestSetSmscAddress(int request, void *data, size_t datalen, RIL_T
 
 static void requestGetUnlockRetryCount(void*  data, size_t  datalen, RIL_Token  t)
 {
-    ATResponse   *p_response = NULL;
-    int           err;
-    char*         cmd = NULL;
     const char**  strings = (const char**)data;
-    char*         line = NULL;
-    char*         type = NULL;
+    int           err;
     int           retries[2];
 
-    if ( datalen == sizeof(char*) ) {
-        asprintf(&cmd, "AT+CPINR=%s", strings[0]);
-    } else
-        goto error;
-
-    err = at_send_command_singleline(cmd, "+CPINR:", &p_response);
-    free(cmd);
-    if (err < 0 || p_response->success == 0) {
-        goto error;
+    if ( datalen != sizeof(char*) ) {
+        RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+        return;
     }
 
-    line = p_response->p_intermediates->line;
-
-    err = at_tok_start(&line);
-    if (err < 0) {
-        goto error;
-    }
-
-    err = at_tok_nextstr(&line, &type);
-    if (err < 0) {
-        goto error;
-    }
-
-    err = at_tok_nextint(&line, retries+0);
-    if (err < 0) {
-        goto error;
-    }
-
-    err = at_tok_nextint(&line, retries+1);
-    if (err < 0) {
-        goto error;
+    err = getCardLockRetryCount(strings[0], retries+0, retries+1);
+    if (err != CME_SUCCESS) {
+        RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+        return;
     }
 
     RIL_onRequestComplete(t, RIL_E_SUCCESS, retries, sizeof(retries));
-    at_response_free(p_response);
-
-    return;
-
-error:
-    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
-    at_response_free(p_response);
 }
 
 static void requestScreenState(void* data, size_t datalen, RIL_Token t)
