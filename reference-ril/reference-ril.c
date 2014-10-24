@@ -3364,10 +3364,12 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
 
         case RIL_REQUEST_ENTER_SIM_PIN:
             requestEnterSimPin(data, datalen, t);
+            pollSIMState(NULL);
             break;
 
         case RIL_REQUEST_ENTER_SIM_PUK:
             requestEnterSimPuk(data, datalen, t);
+            pollSIMState(NULL);
             break;
 
         case RIL_REQUEST_CHANGE_SIM_PIN:
@@ -3838,7 +3840,7 @@ static void pollSIMState (void *param)
     ATResponse *p_response;
     int ret;
 
-    if (sState != RADIO_STATE_SIM_NOT_READY) {
+    if (sState != RADIO_STATE_ON) {
         // no longer valid to poll
         return;
     }
