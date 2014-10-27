@@ -2557,16 +2557,13 @@ static void  requestEnterSimPin(void*  data, size_t  datalen, RIL_Token  t)
     char*         cmd = NULL;
     const char**  strings = (const char**)data;;
 
-    if ( datalen == 2*sizeof(char*) ) {
-        asprintf(&cmd, "AT+CPIN=%s", strings[0]);
-    } else if ( datalen == 3*sizeof(char*) ) {
-        asprintf(&cmd, "AT+CPIN=%s,%s", strings[0], strings[1]);
-    } else {
+    if (getSIMStatus() != SIM_PIN) {
         int retries = -1;
         RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, &retries, sizeof(int));
         return;
     }
 
+    asprintf(&cmd, "AT+CPIN=%s", strings[0]);
     err = at_send_command_singleline(cmd, "+CPIN:", &p_response);
     free(cmd);
 
@@ -2582,6 +2579,64 @@ static void  requestEnterSimPin(void*  data, size_t  datalen, RIL_Token  t)
     at_response_free(p_response);
 }
 
+static void  requestEnterSimPuk(void*  data, size_t  datalen, RIL_Token  t)
+{
+    ATResponse   *p_response = NULL;
+    int           err;
+    char*         cmd = NULL;
+    const char**  strings = (const char**)data;;
+
+    if (getSIMStatus() != SIM_PUK) {
+        int retries = -1;
+        RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, &retries, sizeof(int));
+        return;
+    }
+
+    asprintf(&cmd, "AT+CPIN=%s,%s", strings[0], strings[1]);
+    err = at_send_command_singleline(cmd, "+CPIN:", &p_response);
+    free(cmd);
+
+    if (err < 0 || p_response->success == 0) {
+        int retries[2] = {-1, -1};
+        getCardLockRetryCount("SIM PUK", retries+0, retries+1);
+        RIL_onRequestComplete(t, RIL_E_PASSWORD_INCORRECT, &retries[0], sizeof(int));
+    } else {
+        int retries = 0;
+        RIL_onRequestComplete(t, RIL_E_SUCCESS, &retries, sizeof(int));
+    }
+
+    at_response_free(p_response);
+}
+
+static void  requestChangeSimPin(void*  data, size_t  datalen, RIL_Token  t)
+{
+    ATResponse   *p_response = NULL;
+    int           err;
+    char*         cmd = NULL;
+    const char**  strings = (const char**)data;;
+
+    // Changing pin is only allowed when sim is ready.
+    if (getSIMStatus() != SIM_READY) {
+        int retries = -1;
+        RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, &retries, sizeof(int));
+        return;
+    }
+
+    asprintf(&cmd, "AT+CPIN=%s,%s", strings[0], strings[1]);
+    err = at_send_command_singleline(cmd, "+CPIN:", &p_response);
+    free(cmd);
+
+    if (err < 0 || p_response->success == 0) {
+        int retries[2] = {-1, -1};
+        getCardLockRetryCount("SIM PIN", retries+0, retries+1);
+        RIL_onRequestComplete(t, RIL_E_PASSWORD_INCORRECT, &retries[0], sizeof(int));
+    } else {
+        int retries = 0;
+        RIL_onRequestComplete(t, RIL_E_SUCCESS, &retries, sizeof(int));
+    }
+
+    at_response_free(p_response);
+}
 
 static void  requestSendUSSD(void *data, size_t datalen __unused, RIL_Token t)
 {
@@ -3392,12 +3447,21 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
         }
 
         case RIL_REQUEST_ENTER_SIM_PIN:
+            requestEnterSimPin(data, datalen, t);
+            break;
+
         case RIL_REQUEST_ENTER_SIM_PUK:
+            requestEnterSimPuk(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_CHANGE_SIM_PIN:
+            requestChangeSimPin(data, datalen, t);
+            break;
+
         case RIL_REQUEST_ENTER_SIM_PIN2:
         case RIL_REQUEST_ENTER_SIM_PUK2:
-        case RIL_REQUEST_CHANGE_SIM_PIN:
         case RIL_REQUEST_CHANGE_SIM_PIN2:
-            requestEnterSimPin(data, datalen, t);
+            // We don't support pin2 and puk2 in qemu currently.
             break;
 
         case RIL_REQUEST_IMS_REGISTRATION_STATE: {
