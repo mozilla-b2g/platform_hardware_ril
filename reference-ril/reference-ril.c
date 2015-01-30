@@ -4051,6 +4051,41 @@ static void waitForClose()
     pthread_mutex_unlock(&s_state_mutex);
 }
 
+static void handleUnsolicitedUssd(const char *s)
+{
+    char *line = NULL;
+    char *p = NULL;
+    char *responseStr[2] = {NULL, NULL};
+    int type = 0;
+    const int count = 2;
+    int i = 0;
+
+    line = p = strdup(s);
+    if (at_tok_start(&p) < 0) {
+        ALOGE("invalid +CUSD response: %s", line);
+        goto done;
+    }
+
+    if (at_tok_nextint(&p, &type) < 0) {
+        ALOGE("invalid +CUSD response: %s", line);
+        goto done;
+    }
+    asprintf(&responseStr[0], "%d", type);
+
+    if (at_tok_hasmore(&p) &&
+        at_tok_nextstr(&p, &responseStr[1]) < 0) {
+        ALOGE("invalid +CUSD response: %s", line);
+        goto done;
+    }
+
+    RIL_onUnsolicitedResponse(RIL_UNSOL_ON_USSD, responseStr, count*sizeof(char*));
+
+done:
+    // We allocate the memory of responseStr[0], so need to free it here.
+    if (responseStr[0]) free(responseStr[0]);
+    free(line);
+}
+
 /**
  * Called by atchannel when an unsolicited line appears
  * This is called on atchannel's reader thread. AT commands may
@@ -4304,6 +4339,8 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         sCnapInfo.CNI_validity = namePresentation;
 
         free(line);
+    } else if (strStartsWith(s, "+CUSD:")) {
+        handleUnsolicitedUssd(s);
     }
 }
 
