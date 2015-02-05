@@ -4578,8 +4578,35 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         }
         free(line);
         RIL_onUnsolicitedResponse(RIL_UNSOL_CDMA_PRL_CHANGED, &version, sizeof(version));
-    } else if (strStartsWith(s, "+CFUN: 0")) {
-        setRadioState(RADIO_STATE_OFF);
+    } else if (strStartsWith(s, "+CFUN:")) {
+        int state = -1;
+        line = p = strdup(s);
+        if (!line) {
+            ALOGE("+CFUN: Unable to allocate memory");
+            return;
+        }
+        if (at_tok_start(&p) < 0) {
+            ALOGE("invalid +CFUN response: %s", s);
+            free(line);
+            return;
+        }
+        if (at_tok_nextint(&p, &state) < 0) {
+            ALOGE("invalid +CFUN response: %s", s);
+            free(line);
+            return;
+        }
+        free(line);
+        switch (state) {
+            case 0:
+                setRadioState(RADIO_STATE_OFF);
+                break;
+            case 1:
+                setRadioState(RADIO_STATE_ON);
+                break;
+            default:
+                ALOGE("invalid +CFUN response: %s", s);
+                return;
+        }
     } else if (strStartsWith(s, "+CSQ:")) {
         RIL_SignalStrength_v6 response;
         line = p = strdup(s);
