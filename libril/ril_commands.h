@@ -123,13 +123,13 @@
     {RIL_REQUEST_ACKNOWLEDGE_INCOMING_GSM_SMS_WITH_PDU, dispatchStrings, responseVoid},
     {RIL_REQUEST_STK_SEND_ENVELOPE_WITH_STATUS, dispatchString, responseSIM_IO},
     {RIL_REQUEST_VOICE_RADIO_TECH, dispatchVoiceRadioTech, responseInts},
+    {RIL_REQUEST_GET_CELL_INFO_LIST, dispatchVoid, responseCellInfoList},
+    {RIL_REQUEST_SET_UNSOL_CELL_INFO_LIST_RATE, dispatchInts, responseVoid},
+    {RIL_REQUEST_SET_INITIAL_ATTACH_APN, dispatchSetInitialAttachApn, responseVoid},
+    {RIL_REQUEST_IMS_REGISTRATION_STATE, dispatchVoid, responseInts},
+    {RIL_REQUEST_IMS_SEND_SMS, dispatchImsSms, responseSMS},
     /* unsupported/unused request numbers below */
-    {0, NULL, NULL},
-    {0, NULL, NULL}, /* 110 */
-    {0, NULL, NULL},
-    {0, NULL, NULL},
-    {0, NULL, NULL},
-    {0, NULL, NULL},
+    {0, NULL, NULL}, /* 114 */
     {0, NULL, NULL},
     {0, NULL, NULL},
     {0, NULL, NULL},
