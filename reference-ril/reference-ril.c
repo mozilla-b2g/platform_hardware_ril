@@ -1942,6 +1942,8 @@ static void requestSendSMS(void *data, size_t datalen, RIL_Token t)
     char *cmd1, *cmd2;
     RIL_SMS_Response response;
     ATResponse *p_response = NULL;
+    char *line;
+    RIL_Errno rile = RIL_E_GENERIC_FAILURE;
 
     smsc = ((const char **)data)[0];
     pdu = ((const char **)data)[1];
@@ -1957,19 +1959,36 @@ static void requestSendSMS(void *data, size_t datalen, RIL_Token t)
     asprintf(&cmd2, "%s%s", smsc, pdu);
 
     err = at_send_command_sms(cmd1, cmd2, "+CMGS:", &p_response);
+    if (err != 0) goto error;
 
-    if (err != 0 || p_response->success == 0) goto error;
+    switch (at_get_cms_error(p_response)) {
+        case CMS_SUCCESS:
+            memset(&response, 0, sizeof(response));
 
-    memset(&response, 0, sizeof(response));
+            line = p_response->p_intermediates->line;
 
-    /* FIXME fill in messageRef and ackPDU */
+            err = at_tok_start(&line);
+            if (err < 0) goto error;
 
-    RIL_onRequestComplete(t, RIL_E_SUCCESS, &response, sizeof(response));
-    at_response_free(p_response);
+            err = at_tok_nextint(&line, &(response.messageRef));
+            if (err < 0) goto error;
 
-    return;
+            if (at_tok_hasmore(&line)) {
+                err = at_tok_nextstr(&line, &(response.ackPDU));
+                if (err < 0) goto error;
+            }
+
+            RIL_onRequestComplete(t, RIL_E_SUCCESS, &response, sizeof(response));
+            at_response_free(p_response);
+            return;
+
+        case CMS_TEMPORARY_FAILURE:
+            rile = RIL_E_SMS_SEND_FAIL_RETRY;
+            break;
+    }
+
 error:
-    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+    RIL_onRequestComplete(t, rile, NULL, 0);
     at_response_free(p_response);
 }
 
@@ -2276,23 +2295,30 @@ error:
 static void requestSMSAcknowledge(void *data, size_t datalen, RIL_Token t)
 {
     int ackSuccess;
+    ATResponse *p_response = NULL;
     int err;
 
     ackSuccess = ((int *)data)[0];
 
     if (ackSuccess == 1) {
-        err = at_send_command("AT+CNMA=1", NULL);
+        err = at_send_command("AT+CNMA=1", &p_response);
     } else if (ackSuccess == 0)  {
-        err = at_send_command("AT+CNMA=2", NULL);
+        err = at_send_command("AT+CNMA=2", &p_response);
     } else {
         ALOGE("unsupported arg to RIL_REQUEST_SMS_ACKNOWLEDGE\n");
         goto error;
     }
 
+    if (err != 0 || p_response->success == 0) goto error;
+
     RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+
+    at_response_free(p_response);
+    return;
+
 error:
     RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
-
+    at_response_free(p_response);
 }
 
 static void  requestSIM_IO(void *data, size_t datalen, RIL_Token t)

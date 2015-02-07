@@ -229,6 +229,9 @@ static void handleFinalResponse(const char *line)
     sp_response->finalResponse = strdup(line);
 
     pthread_cond_signal(&s_commandcond);
+
+    // Wait the response being taken.
+    pthread_cond_wait(&s_commandcond, &s_commandmutex);
 }
 
 static void handleUnsolicited(const char *line)
@@ -577,6 +580,9 @@ static void clearPendingCommand()
     sp_response = NULL;
     s_responsePrefix = NULL;
     s_smsPDU = NULL;
+
+    // Signal readerLoop that the response was already taken.
+    pthread_cond_signal(&s_commandcond);
 }
 
 
@@ -1014,5 +1020,40 @@ AT_CME_Error at_get_cme_error(const ATResponse *p_response)
     }
 
     return (AT_CME_Error) ret;
+}
+
+/**
+ * Returns error code from response
+ */
+AT_CMS_Error at_get_cms_error(const ATResponse *p_response)
+{
+    int ret;
+    int err;
+    char *p_cur;
+
+    if (p_response->success > 0) {
+        return CMS_SUCCESS;
+    }
+
+    if (p_response->finalResponse == NULL
+        || !strStartsWith(p_response->finalResponse, "+CMS ERROR:")
+    ) {
+        return CMS_ERROR_NON_CMS;
+    }
+
+    p_cur = p_response->finalResponse;
+    err = at_tok_start(&p_cur);
+
+    if (err < 0) {
+        return CMS_ERROR_NON_CMS;
+    }
+
+    err = at_tok_nextint(&p_cur, &ret);
+
+    if (err < 0) {
+        return CMS_ERROR_NON_CMS;
+    }
+
+    return (AT_CMS_Error) ret;
 }
 

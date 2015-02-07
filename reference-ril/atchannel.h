@@ -120,6 +120,19 @@ typedef enum {
 
 AT_CME_Error at_get_cme_error(const ATResponse *p_response);
 
+typedef enum {
+    CMS_ERROR_NON_CMS = -1,
+    CMS_SUCCESS = 0,
+
+    // See 3GPP TS 24.011 Annex E: `This cause indicates that the network is
+    // not functioning correctly and that the condition is not likely to last a
+    // long period of time; e.g., the Mobile Station may wish to try another
+    // short message transfer attempt almost immediately.`
+    CMS_TEMPORARY_FAILURE = 41,
+} AT_CMS_Error;
+
+AT_CMS_Error at_get_cms_error(const ATResponse *p_response);
+
 #ifdef __cplusplus
 }
 #endif
