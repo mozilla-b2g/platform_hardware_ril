@@ -768,7 +768,7 @@ static void requestSetNetworkSelectionManual(
 
     int rilError = RIL_E_SUCCESS;
     if (err < 0) {
-        ALOGE("requestSetNetworkSelectionManual failed, err: %d", err);
+        RLOGE("requestSetNetworkSelectionManual failed, err: %d", err);
         at_response_free(p_response);
         RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
         return;
@@ -1052,7 +1052,7 @@ static void requestLastCallFailCause(RIL_Token t)
     return;
 error:
     at_response_free(p_response);
-    ALOGE("requestLastCallFailCause error!");
+    RLOGE("requestLastCallFailCause error!");
     RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 }
 
@@ -1072,7 +1072,7 @@ static void requestConference(RIL_Token t)
     return;
 error:
     at_response_free(p_response);
-    ALOGE("requestConference error!");
+    RLOGE("requestConference error!");
     RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 }
 
@@ -1100,7 +1100,7 @@ static void requestSeparateConnection(void *data, size_t datalen, RIL_Token t)
     return;
 error:
     at_response_free(p_response);
-    ALOGE("requestSeparateConnection error!");
+    RLOGE("requestSeparateConnection error!");
     RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 }
 
@@ -1655,7 +1655,7 @@ static void requestRegistrationState(int request, void *data,
     goto done;
 
 error:
-    ALOGE("requestRegistrationState must never return an error when radio is on");
+    RLOGE("requestRegistrationState must never return an error when radio is on");
     RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 
 done:
@@ -1723,14 +1723,14 @@ static int parseOperatorInfo(char *info, char **p_operatorStart)
 {
     int err = at_tok_start(&info);
     if (err < 0) {
-        ALOGE("QUERY_AVAILABLE_NETWORKS: Error tokenizing operator status");
+        RLOGE("QUERY_AVAILABLE_NETWORKS: Error tokenizing operator status");
         return err;
     }
 
     char *status;
     err = parseOperatorStatus(&info, &status);
     if (err < 0) {
-        ALOGE("QUERY_AVAILABLE_NETWORKS: Error parsing operator status");
+        RLOGE("QUERY_AVAILABLE_NETWORKS: Error parsing operator status");
         return err;
     }
     p_operatorStart[3] = status;
@@ -1739,7 +1739,7 @@ static int parseOperatorInfo(char *info, char **p_operatorStart)
     char *longName;
     err = copyNextStr(&info, &longName);
     if (err < 0) {
-        ALOGE("QUERY_AVAILABLE_NETWORKS: Error copying long name from operator");
+        RLOGE("QUERY_AVAILABLE_NETWORKS: Error copying long name from operator");
         return err;
     }
     p_operatorStart[0] = longName;
@@ -1748,7 +1748,7 @@ static int parseOperatorInfo(char *info, char **p_operatorStart)
     char *shortName;
     err = copyNextStr(&info, &shortName);
     if (err < 0) {
-        ALOGE("QUERY_AVAILABLE_NETWORKS: Error copying short name from operator");
+        RLOGE("QUERY_AVAILABLE_NETWORKS: Error copying short name from operator");
         return err;
     }
     p_operatorStart[1] = shortName;
@@ -1757,7 +1757,7 @@ static int parseOperatorInfo(char *info, char **p_operatorStart)
     char *numeric;
     err = copyNextStr(&info, &numeric);
     if (err < 0) {
-        ALOGE("QUERY_AVAILABLE_NETWORKS: Error copying numeric tuple from operator");
+        RLOGE("QUERY_AVAILABLE_NETWORKS: Error copying numeric tuple from operator");
         return err;
     }
     p_operatorStart[2] = numeric;
@@ -1772,7 +1772,7 @@ static int requestAvailableOperators(char ***p_operators, int *p_bufferSize)
     int err = at_send_command_multiline ("AT+COPS=?", "+COPS:", &p_response);
 
     if (err < 0 || !p_response->p_intermediates) {
-        ALOGE("Error: No operator list returned");
+        RLOGE("Error: No operator list returned");
         return err;
     }
 
@@ -2248,7 +2248,7 @@ static void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
 
         cid = findFreeCid();
         if (cid < 0) {
-            ALOGE("error: no free cid found.");
+            RLOGE("error: no free cid found.");
             goto error;
         }
 
@@ -3059,7 +3059,7 @@ onCdmaSpecificRequest (int request, void *data, size_t datalen, RIL_Token t)
             break;
 
         default:
-            ALOGD("Request not supported. Tech: %d", TECH(sMdmInfo));
+            RLOGD("Request not supported. Tech: %d", TECH(sMdmInfo));
             RIL_onRequestComplete(t, RIL_E_REQUEST_NOT_SUPPORTED, NULL, 0);
             break;
     }
@@ -3116,7 +3116,7 @@ onGsmSpecificRequest (int request, void *data, size_t datalen, RIL_Token t)
         }
 
         default:
-            ALOGD("Request not supported. Tech: %d",TECH(sMdmInfo));
+            RLOGD("Request not supported. Tech: %d",TECH(sMdmInfo));
             RIL_onRequestComplete(t, RIL_E_REQUEST_NOT_SUPPORTED, NULL, 0);
             break;
     }
@@ -4099,13 +4099,13 @@ static void queryNumOfDataContexts()
             s_maxDataContexts = end;
         }
     }
-    ALOGI("Number of data contexts: %d", s_maxDataContexts);
+    RLOGI("Number of data contexts: %d", s_maxDataContexts);
 
     at_response_free(p_response);
     return;
 
 error:
-    ALOGE("Error getting number of data contexts.");
+    RLOGE("Error getting number of data contexts.");
     at_response_free(p_response);
 }
 
@@ -4276,13 +4276,13 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         line = strdup(s);
         err = at_tok_start(&line);
         if (err < 0) {
-            ALOGE("Error  %d \t %s\n ", err, line);
+            RLOGE("Error  %d \t %s\n ", err, line);
         }
         err = at_tok_nextstr(&line, &pStkPdu);
         if (err < 0) {
-            ALOGE("Error:  %d \t %s\n ", err, line);
+            RLOGE("Error:  %d \t %s\n ", err, line);
         }
-        ALOGI("STK Command PDU : %s \n", pStkPdu);
+        RLOGI("STK Command PDU : %s \n", pStkPdu);
         if(NULL != pStkPdu) {
             RIL_onUnsolicitedResponse (RIL_UNSOL_STK_PROACTIVE_COMMAND,
                                        pStkPdu, strlen(pStkPdu));
@@ -4421,11 +4421,11 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         RIL_SignalStrength_v6 response;
         line = p = strdup(s);
         if (!line) {
-            ALOGE("+CSQ: Unable to allocate memory");
+            RLOGE("+CSQ: Unable to allocate memory");
             return;
         }
         if (at_tok_start(&p) < 0) {
-            ALOGE("invalid +CSQ response: %s", s);
+            RLOGE("invalid +CSQ response: %s", s);
             free(line);
             return;
         }
@@ -4441,21 +4441,21 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         int len = 0;
         line = p = strdup(s);
         if (!line) {
-            ALOGE("+CNAP: Unable to allocate memory");
+            RLOGE("+CNAP: Unable to allocate memory");
             return;
         }
         if (at_tok_start(&p) < 0) {
-            ALOGE("invalid +CNAP response: %s", s);
+            RLOGE("invalid +CNAP response: %s", s);
             free(line);
             return;
         }
         if (at_tok_nextstr(&p, &name) < 0) {
-            ALOGE("invalid +CNAP response: %s", s);
+            RLOGE("invalid +CNAP response: %s", s);
             free(line);
             return;
         }
         if (at_tok_nextint(&p, &namePresentation) < 0) {
-            ALOGE("invalid +CNAP response: %s", s);
+            RLOGE("invalid +CNAP response: %s", s);
             free(line);
             return;
         }
@@ -4631,7 +4631,7 @@ const RIL_RadioFunctions *RIL_Init(const struct RIL_Env *env, int argc, char **a
 
             case 'c':
                 s_client_id = optarg;
-                ALOGI("Client ID %s\n", s_client_id);
+                RLOGI("Client ID %s\n", s_client_id);
             break;
 
             default:
@@ -4687,7 +4687,7 @@ int main (int argc, char **argv)
 
             case 'c':
                 s_client_id = optarg;
-                ALOGI("Client ID %s\n", s_client_id);
+                RLOGI("Client ID %s\n", s_client_id);
             break;
 
             default:
