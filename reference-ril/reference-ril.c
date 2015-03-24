@@ -3077,6 +3077,27 @@ static void requestSetFacilityLock(void* data, size_t datalen, RIL_Token t)
     at_response_free(p_response);
 }
 
+static void requestChangeBarringPassword(void* data, size_t datalen, RIL_Token t)
+{
+    ATResponse   *p_response = NULL;
+    int           err;
+    char*         cmd = NULL;
+    const char**  strings = (const char**)data;
+
+    // Change call barring password. AT+CPWD=<fac>,<oldpwd>,<newpwd>
+    asprintf(&cmd, "AT+CPWD=\"%s\",\"%s\",\"%s\"", strings[0], strings[1], strings[2]);
+    err = at_send_command(cmd, &p_response);
+    free(cmd);
+
+    if (err < 0 || p_response->success == 0) {
+        RIL_onRequestComplete(t, cmeErrorToRilError(at_get_cme_error(p_response)), NULL, 0);
+    } else {
+        RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    }
+
+    at_response_free(p_response);
+}
+
 /*** Callback methods from the RIL library to us ***/
 
 /**
@@ -3625,6 +3646,10 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
 
         case RIL_REQUEST_SET_FACILITY_LOCK:
             requestSetFacilityLock(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_CHANGE_BARRING_PASSWORD:
+            requestChangeBarringPassword(data, datalen, t);
             break;
 
         default:
