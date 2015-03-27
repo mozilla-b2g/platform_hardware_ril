@@ -160,6 +160,12 @@ typedef enum {
     RUIM_NETWORK_PERSONALIZATION = 11
 } SIM_Status;
 
+typedef enum {
+    DTMF_NONE = -1,
+    DTMF_STOP = 0,
+    DTMF_START = 1
+} DTMF_Request_Type;
+
 static void onRequest (int request, void *data, size_t datalen, RIL_Token t);
 static RIL_RadioState currentState();
 static int onSupports (int requestCode);
@@ -3069,6 +3075,36 @@ static void requestStkSendEnvelopeCommand(const void * data, size_t datalen, RIL
     at_response_free(p_response);
 }
 
+static void requestDtmf(DTMF_Request_Type request, void *data, size_t datalen,
+                        RIL_Token t)
+{
+    char c = '0';
+    if (data) {
+      c = ((char *)data)[0];
+    }
+
+    char *cmd;
+    if (request == DTMF_NONE) {
+      asprintf(&cmd, "AT+EVTS=%c", (int)c);
+    } else {
+      asprintf(&cmd, "AT+EVTS=%c,%d", (int)c, request);
+    }
+
+    ATResponse *p_response = NULL;
+    int err;
+    err = at_send_command(cmd, &p_response);
+    free(cmd);
+    if (err < 0 || at_get_cme_error(p_response) != CME_SUCCESS) {
+      RLOGE("DTMF error!");
+      at_response_free(p_response);
+      RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+      return;
+    }
+
+    at_response_free(p_response);
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+}
+
 /*** Callback methods from the RIL library to us ***/
 
 /**
@@ -3320,15 +3356,15 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
         case RIL_REQUEST_RADIO_POWER:
             requestRadioPower(data, datalen, t);
             break;
-        case RIL_REQUEST_DTMF: {
-            char c = ((char *)data)[0];
-            char *cmd;
-            asprintf(&cmd, "AT+VTS=%c", (int)c);
-            at_send_command(cmd, NULL);
-            free(cmd);
-            RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+        case RIL_REQUEST_DTMF:
+            requestDtmf(DTMF_NONE, data, datalen, t);
             break;
-        }
+        case RIL_REQUEST_DTMF_START:
+            requestDtmf(DTMF_START, data, datalen, t);
+            break;
+        case RIL_REQUEST_DTMF_STOP:
+            requestDtmf(DTMF_STOP, data, datalen, t);
+            break;
         case RIL_REQUEST_IMS_SEND_SMS:
             requestImsSendSMS(data, datalen, t);
             break;
