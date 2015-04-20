@@ -150,7 +150,12 @@ static const char * s_finalResponsesError[] = {
     "ERROR",
     "+CMS ERROR:",
     "+CME ERROR:",
-    "NO CARRIER", /* sometimes! */
+    // Supporting taking "NO CARRIER" as final response may cause the
+    // unsolicited event lost, see https://bugzilla.mozilla.org/show_bug.cgi?id=1155022#c1.
+    // Besides, qemu doesn't support replying "NO CARRIER" as final response for
+    // now. So it is safe to remove the "NO CARRIER" from final response list in
+    // rild.
+    //"NO CARRIER", /* sometimes! */
     "NO ANSWER",
     "NO DIALTONE",
 };
