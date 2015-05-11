@@ -3036,6 +3036,31 @@ static void requestDtmf(DTMF_Request_Type request, void *data, size_t datalen,
     RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
 }
 
+static void requestGenericSimIO(const char *pdu, RIL_Token t) {
+    ATResponse *p_response = NULL;
+    int err;
+    char *cmd = NULL;
+
+    // +CSIM=<length>,<command>:
+    // <length>  : integer type; length of the characters that are sent to TE in
+    //             <command> (two times the actual length of the command or response)
+    // <command> : command passed on by the MT to the SIM in the format as
+    //             described in GSM 51.011. (hexadecimal character format; refer +CSCS)
+    asprintf(&cmd, "AT+CSIM=%d,%s", strlen(pdu), pdu);
+
+    err = at_send_command_singleline(cmd, "+CSIM:", &p_response);
+    free(cmd);
+
+    if (err < 0 || p_response->success == 0) {
+        RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+    } else {
+        /* TODO fill in response PDU */
+        RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    }
+
+    at_response_free(p_response);
+}
+
 /*** Callback methods from the RIL library to us ***/
 
 /**
@@ -3499,6 +3524,23 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
         case RIL_REQUEST_SET_FACILITY_LOCK:
             requestSetFacilityLock(data, datalen, t);
             break;
+
+        case RIL_REQUEST_STK_SEND_TERMINAL_RESPONSE:
+        case RIL_REQUEST_STK_SEND_ENVELOPE_COMMAND: {
+            // 10.1 Command APDU structure in TS 102 221:
+            // CLA (1), INS (1), P1 (1), P2 (1), Lc (0-1), Data (Lc), Le (0-1)
+            // 6.8 Structure of TERMINAL RESPONSE in TS 102 223:
+            // Class = 'A0', INS = '14', P1 = '00', P2 = '00', HEX_DATA, (No Le)
+            // 7 ENVELOPE commands in TS 102 223:
+            // Class = 'A0', INS = 'C2', P1 = '00', P2 = '00', HEX_DATA, (No Le)
+            char * pdu = NULL;
+            int instructionCode =
+              request == RIL_REQUEST_STK_SEND_TERMINAL_RESPONSE ? 0x14 : 0xC2;
+            asprintf(&pdu, "A0%2X0000%s", instructionCode, (const char *) data);
+            requestGenericSimIO(pdu, t);
+            free(pdu);
+            break;
+        }
 
         default:
             if (TECH_BIT(sMdmInfo) & (MDM_CDMA | MDM_EVDO)) {
