@@ -3068,15 +3068,19 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
             // 3GPP 22.030 6.5.5
             // "Places all active calls (if any exist) on hold and accepts
             //  the other (held or waiting) call."
-            at_send_command("AT+CHLD=2", NULL);
+            p_response = NULL;
+            err = at_send_command("AT+CHLD=2", &p_response);
 
 #ifdef WORKAROUND_ERRONEOUS_ANSWER
             s_expectAnswer = 1;
 #endif /* WORKAROUND_ERRONEOUS_ANSWER */
 
-            /* success or failure is ignored by the upper layer here.
-               it will call GET_CURRENT_CALLS and determine success that way */
-            RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+            if (err < 0 || p_response->success == 0) {
+                RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+            } else {
+                RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+            }
+            at_response_free(p_response);
             break;
         case RIL_REQUEST_ANSWER:
             at_send_command("ATA", NULL);
