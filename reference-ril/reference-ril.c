@@ -1215,8 +1215,10 @@ error:
  */
 static int networkModePossible(ModemInfo *mdm, int nm)
 {
-    if ((net2modem[nm] & mdm->supportedTechs) == net2modem[nm]) {
-       return 1;
+    if ((sizeof(net2pmask) / sizeof(int32_t)) > nm &&
+        (sizeof(net2modem) / sizeof(int)) > nm &&
+        (net2modem[nm] & mdm->supportedTechs) == net2modem[nm]) {
+        return 1;
     }
     return 0;
 }
@@ -1228,13 +1230,18 @@ static void requestSetPreferredNetworkType( int request __unused, void *data,
     int value = *(int *)data;
     int current, old;
     int err;
-    int32_t preferred = net2pmask[value];
+    int32_t preferred;
 
     RLOGD("requestSetPreferredNetworkType: current: %x. New: %x", PREFERRED_NETWORK(sMdmInfo), preferred);
+
     if (!networkModePossible(sMdmInfo, value)) {
         RIL_onRequestComplete(t, RIL_E_MODE_NOT_SUPPORTED, NULL, 0);
         return;
     }
+
+    preferred = net2pmask[value];
+    ALOGD("requestSetPreferredNetworkType: current: %x. New: %x", PREFERRED_NETWORK(sMdmInfo), preferred);
+
     if (query_ctec(sMdmInfo, &current, NULL) < 0) {
         RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
         return;
