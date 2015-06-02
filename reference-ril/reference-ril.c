@@ -3057,6 +3057,49 @@ static void requestChangeBarringPassword(void* data, size_t datalen, RIL_Token t
     at_response_free(p_response);
 }
 
+static void requestStkSendTerminalResponse(const void* data, size_t datalen, RIL_Token t) {
+    ATResponse *p_response = NULL;
+    int err;
+    char *cmd = NULL;
+    const char* response = (const char*) data;
+
+    // Send USAT terminal response: +CUSATT=<terminal_response>
+    asprintf(&cmd, "AT+CUSATT=%s", response);
+
+    err = at_send_command_singleline(cmd, "+CUSATT:", &p_response);
+    free(cmd);
+
+    if (err < 0 || p_response->success == 0) {
+        RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+    } else {
+        RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    }
+
+    at_response_free(p_response);
+}
+
+static void requestStkSendEnvelopeCommand(const void * data, size_t datalen, RIL_Token t) {
+    ATResponse *p_response = NULL;
+    int err;
+    char *cmd = NULL;
+    const char* envelope = (const char*) data;
+
+    //  Send USAT envelope command: +CUSATE=<envelope_command>
+    asprintf(&cmd, "AT+CUSATE=%s", envelope);
+
+    err = at_send_command_singleline(cmd, "+CUSATE:", &p_response);
+    free(cmd);
+
+    if (err < 0 || p_response->success == 0) {
+        RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+    } else {
+        // TODO fill in envelope response PDU
+        RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    }
+
+    at_response_free(p_response);
+}
+
 /*** Callback methods from the RIL library to us ***/
 
 /**
@@ -3523,6 +3566,14 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
 
         case RIL_REQUEST_CHANGE_BARRING_PASSWORD:
             requestChangeBarringPassword(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_STK_SEND_TERMINAL_RESPONSE:
+            requestStkSendTerminalResponse(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_STK_SEND_ENVELOPE_COMMAND:
+            requestStkSendEnvelopeCommand(data, datalen, t);
             break;
 
         default:
