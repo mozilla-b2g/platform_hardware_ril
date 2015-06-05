@@ -1933,6 +1933,27 @@ error:
     at_response_free(p_response);
 }
 
+static void requestCdmaFlash(void *data, size_t dateLen, RIL_Token t)
+{
+    int err;
+    char *cmd;
+    ATResponse *p_response = NULL;
+    const char *feature_string = (const char *) data;
+
+    asprintf(&cmd, "AT+WFSH=%s", feature_string);
+    err = at_send_command(cmd, &p_response);
+    free(cmd);
+
+    if (err < 0 || p_response->success == 0) {
+        RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+        at_response_free(p_response);
+        return;
+    }
+
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    at_response_free(p_response);
+}
+
 static void requestCdmaSendSMS(void *data, size_t datalen, RIL_Token t)
 {
     int err = 1; // Set to go to error:
@@ -3047,6 +3068,10 @@ static void
 onCdmaSpecificRequest (int request, void *data, size_t datalen, RIL_Token t)
 {
     switch (request) {
+        case RIL_REQUEST_CDMA_FLASH:
+            requestCdmaFlash(data, datalen, t);
+            break;
+
         case RIL_REQUEST_CDMA_SEND_SMS:
             requestCdmaSendSMS(data, datalen, t);
             break;
