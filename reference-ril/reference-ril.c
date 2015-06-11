@@ -1626,7 +1626,7 @@ static void requestRegistrationState(int request, void *data,
         RLOGD("registration state type: 3GPP2");
         // TODO: Query modem
         if(request == RIL_REQUEST_VOICE_REGISTRATION_STATE) {
-            asprintf(&responseStr[3], "8");     // EvDo revA
+            asprintf(&responseStr[3], "%d", type);  // Radio Technology
             asprintf(&responseStr[4], "1");     // BSID
             asprintf(&responseStr[5], "123");   // Latitude
             asprintf(&responseStr[6], "222");   // Longitude
@@ -3641,6 +3641,8 @@ setRadioTechnology(ModemInfo *mdm, int newtech)
             if (tech > 0 ) {
                 RIL_onUnsolicitedResponse(RIL_UNSOL_VOICE_RADIO_TECH_CHANGED,
                                           &tech, sizeof(tech));
+                RIL_onUnsolicitedResponse (RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED,
+                                           NULL, 0);
             }
         }
     }
