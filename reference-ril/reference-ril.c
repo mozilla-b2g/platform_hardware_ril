@@ -1465,6 +1465,32 @@ error:
     RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 }
 
+static void requestCdmaFlash(void *data, size_t datalen, RIL_Token t)
+{
+    int err;
+    const char *str;
+    char *cmd;
+    ATResponse *p_response = NULL;
+
+    str=((const char *)data);
+    if (str == NULL) {
+        err = at_send_command("AT+WFSH", &p_response);
+    } else {
+        asprintf(&cmd, "AT+WFSH=%s;", str);
+        err = at_send_command(cmd, &p_response);
+    }
+    free(cmd);
+
+    if (err < 0 || p_response->success == 0) {
+        RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+        at_response_free(p_response);
+        return;
+    }
+
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    at_response_free(p_response);
+}
+
 static int parseRegistrationState(char *str, int *type, int *items, int **response)
 {
     int err;
@@ -3161,6 +3187,10 @@ onCdmaSpecificRequest (int request, void *data, size_t datalen, RIL_Token t)
 
         case RIL_REQUEST_EXIT_EMERGENCY_CALLBACK_MODE:
             requestExitEmergencyMode(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_CDMA_FLASH:
+            requestCdmaFlash(data, datalen, t);
             break;
 
         default:
