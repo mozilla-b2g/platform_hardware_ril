@@ -3489,6 +3489,7 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
         case RIL_REQUEST_ENTER_SIM_PUK2:
         case RIL_REQUEST_CHANGE_SIM_PIN2:
             // We don't support pin2 and puk2 in qemu currently.
+            RIL_onRequestComplete(t, RIL_E_REQUEST_NOT_SUPPORTED, NULL, 0);
             break;
 
         case RIL_REQUEST_IMS_REGISTRATION_STATE: {
