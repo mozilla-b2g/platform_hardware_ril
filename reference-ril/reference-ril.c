@@ -4804,17 +4804,16 @@ mainLoop(void *param __unused)
             if (s_port > 0) {
                 fd = socket_loopback_client(s_port, SOCK_STREAM);
             } else if (s_device_socket) {
-                if (!s_client_id) {
-                    s_client_id = "";
-                }
-
                 if (!strcmp(s_device_path, "/dev/socket/qemud")) {
                     /* Before trying to connect to /dev/socket/qemud (which is
                      * now another "legacy" way of communicating with the
                      * emulator), we will try to connecto to gsm service via
                      * qemu pipe. */
+                    char gsmService[10];
                     char buffer[32];
-                    snprintf(buffer, sizeof(buffer), "qemud:gsm%s", s_client_id);
+                    snprintf(gsmService, sizeof(gsmService), "gsm%s",
+                             (0 == strcmp(s_client_id, "0")) ? "" : s_client_id);
+                    snprintf(buffer, sizeof(buffer), "qemud:%s", gsmService);
                     fd = qemu_pipe_open(buffer);
                     if (fd < 0) {
                         /* Qemu-specific control socket */
@@ -4823,7 +4822,7 @@ mainLoop(void *param __unused)
                                                   SOCK_STREAM );
                         if (fd >= 0 ) {
                             char  answer[2];
-                            int len = snprintf(buffer, sizeof(buffer), "gsm%s", s_client_id);
+                            int len = snprintf(buffer, sizeof(buffer), "%s", gsmService);
                             if ( write(fd, buffer, len) != len ||
                                  read(fd, answer, 2) != 2 ||
                                  memcmp(answer, "OK", 2) != 0)
