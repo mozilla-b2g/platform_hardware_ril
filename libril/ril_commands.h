@@ -147,8 +147,7 @@
     {RIL_REQUEST_GET_RADIO_CAPABILITY, dispatchVoid, responseRadioCapability},
     {RIL_REQUEST_SET_RADIO_CAPABILITY, dispatchRadioCapability, responseRadioCapability},
     /* unsupported/unused request numbers below */
-    {0, NULL, NULL}, /* 131 */
-    {0, NULL, NULL},
+    {0, NULL, NULL}, /* 132 */
     {0, NULL, NULL},
     {0, NULL, NULL},
     {0, NULL, NULL},
