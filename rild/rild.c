@@ -211,7 +211,8 @@ int main(int argc, char **argv)
 
                 sleep(1);
 
-                snprintf(buffer, sizeof(buffer), "qemud:gsm%s", clientId);
+                snprintf(buffer, sizeof(buffer), "qemud:gsm%s",
+                         (0 == strcmp(clientId, "0")) ? "" : clientId);
                 fd = qemu_pipe_open(buffer);
                 if (fd < 0) {
                     fd = socket_local_client(
