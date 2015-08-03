@@ -545,6 +545,8 @@ static int parseCGCONTRDP(char *line, RIL_Data_Call_Response_v6 *response)
     response->active = 2;
     // Assume IP
     response->type = "IP";
+    // Assume no pcscf
+    response->pcscf = "";
 
     // bearer_id
     err = at_tok_nextint(&line, &bearer_id);
