@@ -4443,7 +4443,6 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 
         err = at_tok_nextstr(&p, &response);
 
-        free(line);
         if (err != 0) {
             RLOGE("invalid NITZ line %s\n", s);
         } else {
@@ -4451,6 +4450,7 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
                 RIL_UNSOL_NITZ_TIME_RECEIVED,
                 response, strlen(response));
         }
+        free(line);
     } else if (strStartsWith(s,"+CRING:")
                 || strStartsWith(s,"RING")
     ) {
