@@ -4460,6 +4460,25 @@ typedef struct {
  */
 #define RIL_REQUEST_GET_ACTIVITY_INFO 135
 
+/**
+ * RIL_REQUEST_GET_UNLOCK_RETRY_COUNT
+ *
+ * Queries the number of remaining retries
+ *
+ * "data" is const char **
+ * ((const char **)data)[0] is the lock type
+ *
+ * "response is int *"
+ * ((int *)response)[0] is the number of retries remaining, or -1 if unknown
+ * ((int *)response)[1] is the default number of retries remaining, or -1 if unknown
+ *
+ * SUCCESS
+ * GENERIC_FAILURE
+ * REQUEST_NOT_SUPPORTED
+ */
+#define RIL_REQUEST_GET_UNLOCK_RETRY_COUNT 150
+
+
 /***********************************************************************/
 
 
@@ -5234,7 +5253,7 @@ const RIL_RadioFunctions *RIL_Init(const struct RIL_Env *env, int argc, char **a
  *
  * @param callbacks user-specifed callback function
  */
-void RIL_register (const RIL_RadioFunctions *callbacks);
+void RIL_register (const RIL_RadioFunctions *callbacks, const char *clientId);
 
 
 /**

@@ -4291,9 +4291,10 @@ static void startListen(RIL_SOCKET_ID socket_id, SocketListenParam* socket_liste
 }
 
 extern "C" void
-RIL_register (const RIL_RadioFunctions *callbacks) {
+RIL_register (const RIL_RadioFunctions *callbacks, const char *clientId) {
     int ret;
     int flags;
+    char buffer[32];
 
     RLOGI("SIM_COUNT: %d", SIM_COUNT);
 
@@ -5114,6 +5115,7 @@ requestToString(int request) {
         case RIL_REQUEST_GET_DC_RT_INFO: return "GET_DC_RT_INFO";
         case RIL_REQUEST_SET_DC_RT_INFO_RATE: return "SET_DC_RT_INFO_RATE";
         case RIL_REQUEST_SET_DATA_PROFILE: return "SET_DATA_PROFILE";
+        case RIL_REQUEST_GET_UNLOCK_RETRY_COUNT: return "GET_UNLOCK_RETRY_COUNT";
         case RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED: return "UNSOL_RESPONSE_RADIO_STATE_CHANGED";
         case RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED: return "UNSOL_RESPONSE_CALL_STATE_CHANGED";
         case RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED: return "UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED";
