@@ -1259,41 +1259,31 @@ static void requestCdmaBaseBandVersion(int request, void *data,
     free(responseStr);
 }
 
-static void requestCdmaDeviceIdentity(int request, void *data,
-                                        size_t datalen, RIL_Token t)
+static void requestDeviceIdentity(void *data, size_t datalen, RIL_Token t)
 {
     int err;
-    int response[4];
     char * responseStr[4];
     ATResponse *p_response = NULL;
-    const char *cmd;
-    const char *prefix;
-    char *line, *p;
-    int commas;
-    int skip;
     int count = 4;
 
-    // Fixed values. TODO: Query modem
-    responseStr[0] = "----";
+    // Fixed values. TODO: Bug 1222921, query from modem.
     responseStr[1] = "----";
-    responseStr[2] = "77777777";
+    responseStr[2] = "----";
+    responseStr[3] = "77777777";
 
     err = at_send_command_numeric("AT+CGSN", &p_response);
     if (err < 0 || p_response->success == 0) {
         RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+        at_response_free(p_response);
         return;
     } else {
-        responseStr[3] = p_response->p_intermediates->line;
+        responseStr[0] = p_response->p_intermediates->line;
     }
 
     RIL_onRequestComplete(t, RIL_E_SUCCESS, responseStr, count*sizeof(char*));
     at_response_free(p_response);
 
     return;
-error:
-    ALOGE("requestCdmaDeviceIdentity must never return an error when radio is on");
-    at_response_free(p_response);
-    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 }
 
 static void requestCdmaGetSubscriptionSource(int request, void *data,
@@ -2907,10 +2897,6 @@ onCdmaSpecificRequest (int request, void *data, size_t datalen, RIL_Token t)
             requestCdmaBaseBandVersion(request, data, datalen, t);
             break;
 
-        case RIL_REQUEST_DEVICE_IDENTITY:
-            requestCdmaDeviceIdentity(request, data, datalen, t);
-            break;
-
         case RIL_REQUEST_CDMA_SUBSCRIPTION:
             requestCdmaSubscription(request, data, datalen, t);
             break;
@@ -3307,6 +3293,10 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
 
         case RIL_REQUEST_SET_FACILITY_LOCK:
             requestSetFacilityLock(data, datalen, t);
+            break;
+
+        case RIL_REQUEST_DEVICE_IDENTITY:
+            requestDeviceIdentity(data, datalen, t);
             break;
 
         default:
