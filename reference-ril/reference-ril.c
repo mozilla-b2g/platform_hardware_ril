@@ -2682,11 +2682,7 @@ static void  requestSendUSSD(void *data, size_t datalen, RIL_Token t)
 
     ussdRequest = (char *)(data);
 
-
-    RIL_onRequestComplete(t, RIL_E_REQUEST_NOT_SUPPORTED, NULL, 0);
-
-// @@@ TODO
-
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
 }
 
 static void requestExitEmergencyMode(void *data, size_t datalen, RIL_Token t)
