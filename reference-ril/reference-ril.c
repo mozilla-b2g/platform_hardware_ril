@@ -4509,6 +4509,53 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         sCnapInfo.CNI_validity = namePresentation;
 
         free(line);
+    } else if (strStartsWith(s, "+CDMA_CCWA:")) {
+        // CDMA_CCWA is a customized AT command to notify a CDMA waiting call.
+        // Now, its format is |+CDMA_CCWA: <NUMBER>|, where <NUMBER> is the
+        // number of the incoming call.
+
+        // Check modem tech
+        if (TECH_BIT(sMdmInfo) & (MDM_CDMA | MDM_EVDO) == 0) {
+            ALOGE("|+CDMA_CCWA: <NUMBER>|: CDMA only.");
+            return;
+        }
+
+        RIL_CDMA_CallWaiting_v6 response;
+
+        // Get the calling number from this AT response
+        line = p = strdup(s);
+        if (!line) {
+            ALOGE("|+CDMA_CCWA: <NUMBER>|: Unable to allocate memory");
+            return;
+        }
+        if (at_tok_start(&p) < 0 ||
+            at_tok_nextstr(&p, &response.number) < 0) {
+            ALOGE("|+CDMA_CCWA: <NUMBER>|: Invalid response: %s", s);
+            free(line);
+            return;
+        }
+
+        // TODO: Extend |+CDMA_CCWA| to carry more information
+        response.numberPresentation = 0;
+        response.name = "";
+        response.signalInfoRecord.isPresent = 0;
+        response.signalInfoRecord.signalType = 0;
+        response.signalInfoRecord.alertPitch = 0;
+        response.signalInfoRecord.signal = 0;
+        response.number_type = 0;
+        response.number_plan = 0;
+
+        RIL_onUnsolicitedResponse(RIL_UNSOL_CDMA_CALL_WAITING,
+                                  &response, sizeof(response));
+
+        RIL_onUnsolicitedResponse(RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
+                                  NULL, 0);
+
+#ifdef WORKAROUND_FAKE_CGEV
+        RIL_requestTimedCallback (onDataCallListChanged, NULL, NULL); //TODO use new function
+#endif /* WORKAROUND_FAKE_CGEV */
+
+        free(line);
     }
 }
 
