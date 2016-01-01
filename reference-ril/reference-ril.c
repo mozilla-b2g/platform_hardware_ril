@@ -3500,13 +3500,12 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
 
         case RIL_REQUEST_CANCEL_USSD:
             p_response = NULL;
-            err = at_send_command_numeric("AT+CUSD=2", &p_response);
+            err = at_send_command("AT+CUSD=2", &p_response);
 
             if (err < 0 || p_response->success == 0) {
                 RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
             } else {
-                RIL_onRequestComplete(t, RIL_E_SUCCESS,
-                    p_response->p_intermediates->line, sizeof(char *));
+                RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
             }
             at_response_free(p_response);
             break;
